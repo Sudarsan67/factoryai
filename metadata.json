@@ -1,0 +1,6 @@
+{
+  "name": "FactoryPulse AI",
+  "description": "AI Maintenance Co-Pilot for Textile MSMEs - Industry 4.0 predictive maintenance, simulated IoT engine, explainable failure prediction, and multilingual voice assistance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
