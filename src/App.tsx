@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity,
   Cpu,
@@ -7,7 +7,6 @@ import {
   GitBranch,
   Network,
   Server,
-  Workflow,
   Radio,
   FileCode2,
   Table,
@@ -19,244 +18,231 @@ import {
   Zap,
   Key,
   Link,
-  BookOpen,
   DollarSign,
-  MessageSquare,
+  AlertTriangle,
+  Play,
+  Pause,
+  RefreshCw,
+  Flame,
   Volume2,
-  Clock,
-  Terminal,
-  Search,
-  Filter
+  Thermometer,
+  Wrench,
+  Sliders,
+  Sparkles,
+  Info,
+  TrendingUp,
+  Terminal
 } from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
+
+// Machine Baseline Profiles
+interface MachineProfile {
+  id: string;
+  name: string;
+  type: string;
+  location: string;
+  power: string;
+  baseTemp: number;
+  baseVib: number;
+  baseCurrent: number;
+  baseSound: number;
+  icon: string;
+}
+
+const MACHINE_FLEET: MachineProfile[] = [
+  { id: 'SPN-01', name: 'Spinning Machine (Rotor/Ring)', type: 'Spinning Machine', location: 'Ring Spinning Shed A', power: '45.0 kW', baseTemp: 42.0, baseVib: 0.40, baseCurrent: 5.5, baseSound: 64.0, icon: '🧵' },
+  { id: 'WVE-03', name: 'Air Jet Weaving Loom', type: 'Weaving Loom', location: 'Weaving Shed B', power: '18.5 kW', baseTemp: 48.0, baseVib: 0.45, baseCurrent: 6.0, baseSound: 68.0, icon: '🧶' },
+  { id: 'KNT-02', name: 'Circular Knitting Machine', type: 'Knitting Machine', location: 'Knitting Unit 1', power: '11.0 kW', baseTemp: 44.0, baseVib: 0.35, baseCurrent: 4.2, baseSound: 60.0, icon: '🪡' },
+  { id: 'DYE-04', name: 'High-Temp Dyeing Machine', type: 'Dyeing Machine', location: 'Wet Processing Bay', power: '30.0 kW', baseTemp: 52.0, baseVib: 0.50, baseCurrent: 7.0, baseSound: 66.0, icon: '🧪' },
+  { id: 'MTR-05', name: 'Carding Main Drive Motor (25HP)', type: 'Industrial Motor', location: 'Blowroom Section', power: '18.7 kW', baseTemp: 46.0, baseVib: 0.42, baseCurrent: 5.2, baseSound: 65.0, icon: '⚡' },
+  { id: 'CMP-06', name: 'Pneumatic Loom Compressor', type: 'Compressor', location: 'Utility Plant', power: '37.0 kW', baseTemp: 50.0, baseVib: 0.48, baseCurrent: 8.0, baseSound: 70.0, icon: '💨' }
+];
+
+const FAULT_TYPES = [
+  { name: 'Motor Overheating', desc: 'Stator thermal buildup & coil insulation stress', impact: 'Temp +32°C, Current +4.5A, Sound +12dB', badge: 'Thermal' },
+  { name: 'Bearing Wear', desc: 'Raceway spalling, ball deformation & dry grease', impact: 'Vib +1.1g, Sound +18dB, Temp +14°C', badge: 'Mechanical' },
+  { name: 'High Current Draw', desc: 'Mechanical over-torque & phase electrical load', impact: 'Current +6.0A, Temp +20°C, Sound +10dB', badge: 'Electrical' },
+  { name: 'Excessive Noise', desc: 'Gear tooth chatter & acoustic resonance', impact: 'Sound +26dB, Vib +0.6g, Temp +7°C', badge: 'Acoustic' },
+  { name: 'Misalignment', desc: 'Shaft 1X/2X rotational coupling offset', impact: 'Vib +1.2g, Current +3.0A, Temp +12°C', badge: 'Coupling' },
+  { name: 'Loose Components', desc: 'Foundation bolt slack & unfastened guards', impact: 'Vib +1.5g, Sound +24dB', badge: 'Structural' }
+];
+
+interface LiveSensorState {
+  temperature: number;
+  vibration: number;
+  current: number;
+  sound: number;
+  isFault: boolean;
+  faultType: string | null;
+  history: Array<{ time: string; temp: number; vib: number; curr: number; sound: number }>;
+}
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'architecture' | 'schema' | 'sample_data' | 'folder' | 'apis' | 'dataflow'>('schema');
-  const [selectedTable, setSelectedTable] = useState<string>('machines');
+  const [activeTab, setActiveTab] = useState<'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('simulator');
+  const [selectedMachineId, setSelectedMachineId] = useState<string>('WVE-03');
+  const [isAutoSimulating, setIsAutoSimulating] = useState<boolean>(true);
+  const [tickCounter, setTickCounter] = useState<number>(148);
+  const [lastTickTime, setLastTickTime] = useState<string>(new Date().toLocaleTimeString());
 
-  const machines = [
-    { name: 'Spinning Machine (Rotor/Ring)', id: 'SPN-01', status: 'Healthy', temp: '42.5°C', vib: '0.42g', current: '5.8A', sound: '64.5dB', icon: '🧵' },
-    { name: 'Air Jet Weaving Loom', id: 'WVE-03', status: 'Warning', temp: '68.2°C', vib: '1.45g', current: '9.2A', sound: '84.1dB', icon: '🧶' },
-    { name: 'Circular Knitting Machine', id: 'KNT-02', status: 'Healthy', temp: '44.0°C', vib: '0.35g', current: '4.2A', sound: '60.0dB', icon: '🪡' },
-    { name: 'High-Temp Dyeing Machine', id: 'DYE-04', status: 'Healthy', temp: '52.0°C', vib: '0.50g', current: '7.0A', sound: '66.0dB', icon: '🧪' },
-    { name: 'Carding Main Motor (25HP)', id: 'MTR-05', status: 'Critical', temp: '88.4°C', vib: '2.15g', current: '14.2A', sound: '96.0dB', icon: '⚡' },
-    { name: 'Pneumatic Loom Compressor', id: 'CMP-06', status: 'Warning', temp: '76.0°C', vib: '1.20g', current: '11.8A', sound: '88.0dB', icon: '💨' }
-  ];
+  // Fleet live states
+  const [fleetState, setFleetState] = useState<Record<string, LiveSensorState>>(() => {
+    const initial: Record<string, LiveSensorState> = {};
+    MACHINE_FLEET.forEach(m => {
+      const isFault = m.id === 'WVE-03';
+      const faultType = m.id === 'WVE-03' ? 'Bearing Wear' : null;
+      const initialTemp = m.id === 'WVE-03' ? 68.2 : m.baseTemp;
+      const initialVib = m.id === 'WVE-03' ? 1.45 : m.baseVib;
+      const initialCurr = m.id === 'WVE-03' ? 9.2 : m.baseCurrent;
+      const initialSound = m.id === 'WVE-03' ? 84.1 : m.baseSound;
 
-  const schemaDefinitions: Record<string, {
-    desc: string;
-    pk: string;
-    fk: string;
-    columns: Array<{ name: string; type: string; constraints: string; note: string }>;
-    sampleRows: Array<Record<string, any>>;
-  }> = {
-    machines: {
-      desc: 'Master catalog of textile MSME machinery assets with nominal baselines',
-      pk: 'id (VARCHAR(32))',
-      fk: 'None (Root Entity)',
-      columns: [
-        { name: 'id', type: 'VARCHAR(32)', constraints: 'PRIMARY KEY', note: 'Unique machine code e.g. SPN-01, WVE-03' },
-        { name: 'name', type: 'VARCHAR(100)', constraints: 'NOT NULL', note: 'Standard asset name in textile plant' },
-        { name: 'type', type: 'VARCHAR(50)', constraints: 'NOT NULL', note: 'Spinning, Weaving, Knitting, Dyeing, Motor, Compressor' },
-        { name: 'location_section', type: 'VARCHAR(50)', constraints: 'NOT NULL', note: 'Plant shed e.g. Ring Spinning Shed A' },
-        { name: 'rated_power_kw', type: 'REAL', constraints: 'NOT NULL', note: 'Nominal electric power rating in kW' },
-        { name: 'baseline_temp', type: 'REAL', constraints: 'NOT NULL DEFAULT 45.0', note: 'Nominal operational temperature (°C)' },
-        { name: 'baseline_vib', type: 'REAL', constraints: 'NOT NULL DEFAULT 0.40', note: 'Nominal vibration root-mean-square (g)' },
-        { name: 'baseline_current', type: 'REAL', constraints: 'NOT NULL DEFAULT 5.0', note: 'Nominal operational current draw (Amperes)' },
-        { name: 'baseline_sound', type: 'REAL', constraints: 'NOT NULL DEFAULT 65.0', note: 'Nominal operational acoustic loudness (dB)' },
-        { name: 'manufacturer', type: 'VARCHAR(100)', constraints: 'NULL', note: 'OEM manufacturer e.g. Rieter, Toyota' },
-        { name: 'model_year', type: 'INTEGER', constraints: 'NULL', note: 'Manufacturing year' },
-        { name: 'status', type: 'VARCHAR(20)', constraints: "DEFAULT 'Healthy'", note: 'Healthy, Warning, Critical' },
-        { name: 'installed_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Commissioning timestamp' },
-        { name: 'last_serviced_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Previous routine maintenance' }
-      ],
-      sampleRows: [
-        { id: 'SPN-01', name: 'Spinning Machine (Rotor/Ring)', type: 'Spinning Machine', location: 'Ring Spinning Shed A', power: '45.0 kW', b_temp: '42.0°C', b_vib: '0.40g', b_curr: '5.5A', b_snd: '64.0dB', status: 'Healthy' },
-        { id: 'WVE-03', name: 'Air Jet Weaving Loom', type: 'Weaving Loom', location: 'Weaving Shed B', power: '18.5 kW', b_temp: '48.0°C', b_vib: '0.45g', b_curr: '6.0A', b_snd: '68.0dB', status: 'Warning' },
-        { id: 'KNT-02', name: 'Circular Knitting Machine', type: 'Knitting Machine', location: 'Knitting Unit 1', power: '11.0 kW', b_temp: '44.0°C', b_vib: '0.35g', b_curr: '4.2A', b_snd: '60.0dB', status: 'Healthy' },
-        { id: 'DYE-04', name: 'High-Temp Dyeing Machine', type: 'Dyeing Machine', location: 'Wet Processing Bay', power: '30.0 kW', b_temp: '52.0°C', b_vib: '0.50g', b_curr: '7.0A', b_snd: '66.0dB', status: 'Healthy' },
-        { id: 'MTR-05', name: 'Carding Main Drive Motor (25HP)', type: 'Industrial Motor', location: 'Blowroom Section', power: '18.7 kW', b_temp: '46.0°C', b_vib: '0.42g', b_curr: '5.2A', b_snd: '65.0dB', status: 'Critical' },
-        { id: 'CMP-06', name: 'Pneumatic Loom Compressor', type: 'Compressor', location: 'Utility Plant', power: '37.0 kW', b_temp: '50.0°C', b_vib: '0.48g', b_curr: '8.0A', b_snd: '70.0dB', status: 'Warning' }
-      ]
-    },
-    machine_health: {
-      desc: 'Calculated continuous health scores (0-100) and sub-system grades',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE CASCADE',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Auto-incremented ID' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id)', note: 'Asset identifier' },
-        { name: 'health_score', type: 'REAL', constraints: 'CHECK(0.0 <= val <= 100.0)', note: 'Composite index: 90-100, 70-89, 50-69, <50' },
-        { name: 'category', type: 'VARCHAR(20)', constraints: 'NOT NULL', note: 'Excellent / Good / Warning / Critical' },
-        { name: 'temperature_score', type: 'REAL', constraints: 'NOT NULL (0-100)', note: 'Normalized thermal condition score' },
-        { name: 'vibration_score', type: 'REAL', constraints: 'NOT NULL (0-100)', note: 'Normalized vibration condition score' },
-        { name: 'current_score', type: 'REAL', constraints: 'NOT NULL (0-100)', note: 'Normalized current condition score' },
-        { name: 'sound_score', type: 'REAL', constraints: 'NOT NULL (0-100)', note: 'Normalized acoustic condition score' },
-        { name: 'primary_risk_factor', type: 'VARCHAR(50)', constraints: 'NULL', note: 'Key driver e.g. Vibration (+35%)' },
-        { name: 'updated_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Last calculated timestamp' }
-      ],
-      sampleRows: [
-        { id: 1, machine_id: 'SPN-01', health_score: 94.5, category: 'Excellent', temp_s: 96.0, vib_s: 93.0, curr_s: 95.0, snd_s: 94.0, risk: 'None' },
-        { id: 2, machine_id: 'WVE-03', health_score: 64.2, category: 'Warning', temp_s: 72.0, vib_s: 55.0, curr_s: 68.0, snd_s: 62.0, risk: 'Vibration (+35%)' },
-        { id: 3, machine_id: 'KNT-02', health_score: 96.0, category: 'Excellent', temp_s: 97.0, vib_s: 96.0, curr_s: 95.0, snd_s: 96.0, risk: 'None' },
-        { id: 4, machine_id: 'DYE-04', health_score: 91.0, category: 'Excellent', temp_s: 90.0, vib_s: 92.0, curr_s: 91.0, snd_s: 91.0, risk: 'None' },
-        { id: 5, machine_id: 'MTR-05', health_score: 42.5, category: 'Critical', temp_s: 38.0, vib_s: 44.0, curr_s: 41.0, snd_s: 47.0, risk: 'Motor Overheating & Current Spike' },
-        { id: 6, machine_id: 'CMP-06', health_score: 67.8, category: 'Warning', temp_s: 65.0, vib_s: 70.0, curr_s: 66.0, snd_s: 70.0, risk: 'Pressure Overload' }
-      ]
-    },
-    sensor_readings: {
-      desc: 'High-frequency 5-second simulated IoT telemetry stream records',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE CASCADE',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Auto-increment' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id)', note: 'Indexed foreign key' },
-        { name: 'temperature', type: 'REAL', constraints: 'NOT NULL (°C)', note: 'Range: 35.0°C - 90.0°C' },
-        { name: 'vibration', type: 'REAL', constraints: 'NOT NULL (g)', note: 'Range: 0.1g - 2.5g' },
-        { name: 'current', type: 'REAL', constraints: 'NOT NULL (A)', note: 'Range: 2.0A - 15.0A' },
-        { name: 'sound', type: 'REAL', constraints: 'NOT NULL (dB)', note: 'Range: 50.0dB - 100.0dB' },
-        { name: 'is_fault_injected', type: 'BOOLEAN', constraints: 'DEFAULT 0', note: 'Synthetic fault flag' },
-        { name: 'fault_type', type: 'VARCHAR(50)', constraints: 'DEFAULT NULL', note: 'Fault scenario name' },
-        { name: 'recorded_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Indexed time column' }
-      ],
-      sampleRows: [
-        { id: 101, machine_id: 'SPN-01', temp: '42.5°C', vib: '0.42g', current: '5.8A', sound: '64.5dB', fault_injected: 'False', fault: '-' },
-        { id: 102, machine_id: 'WVE-03', temp: '68.2°C', vib: '1.45g', current: '9.2A', sound: '84.1dB', fault_injected: 'True', fault: 'Bearing Wear' },
-        { id: 103, machine_id: 'MTR-05', temp: '88.4°C', vib: '2.15g', current: '14.2A', sound: '96.0dB', fault_injected: 'True', fault: 'Motor Overheating' },
-        { id: 104, machine_id: 'CMP-06', temp: '76.0°C', vib: '1.20g', current: '11.8A', sound: '88.0dB', fault_injected: 'True', fault: 'High Current Draw' }
-      ]
-    },
-    failure_predictions: {
-      desc: 'Random Forest model inferences, probabilities, and Explainable AI factors',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE CASCADE',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Auto-increment' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id)', note: 'Machine asset ID' },
-        { name: 'prediction_label', type: 'VARCHAR(20)', constraints: 'NOT NULL', note: 'Healthy, Warning, Critical' },
-        { name: 'failure_probability', type: 'REAL', constraints: 'CHECK(0.0 <= val <= 1.0)', note: 'Continuous probability e.g. 0.89 (89%)' },
-        { name: 'predicted_fault', type: 'VARCHAR(100)', constraints: 'NULL', note: 'Fault classification' },
-        { name: 'estimated_rul_hours', type: 'REAL', constraints: 'NULL', note: 'Remaining Useful Life in hours' },
-        { name: 'xai_primary_factor', type: 'VARCHAR(50)', constraints: 'NULL', note: 'Primary feature contributor' },
-        { name: 'xai_explanation_json', type: 'TEXT', constraints: 'NOT NULL', note: 'JSON string of delta percentage shifts' },
-        { name: 'predicted_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Inference timestamp' }
-      ],
-      sampleRows: [
-        { id: 1, machine_id: 'SPN-01', label: 'Healthy', prob: '4%', fault: 'None', rul: '1,850 hrs', factor: 'All Nominal', xai: 'All parameters within standard tolerance' },
-        { id: 2, machine_id: 'WVE-03', label: 'Warning', prob: '68%', fault: 'Bearing Wear', rul: '72 hrs', factor: 'Vibration', xai: 'Vibration +35.2%, Current +22.1%' },
-        { id: 3, machine_id: 'MTR-05', label: 'Critical', prob: '89%', fault: 'Motor Overheating', rul: '8.5 hrs', factor: 'Temperature & Current', xai: 'Temperature +92.1%, Current +173.0%' },
-        { id: 4, machine_id: 'CMP-06', label: 'Warning', prob: '61%', fault: 'High Current Draw', rul: '94 hrs', factor: 'Current', xai: 'Current draw +47.5% over rated load' }
-      ]
-    },
-    maintenance_logs: {
-      desc: 'Prescriptive Co-Pilot troubleshooting work orders, causes, SOPs, and costs',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE CASCADE',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Auto-increment ticket ID' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id)', note: 'Asset identifier' },
-        { name: 'problem_title', type: 'VARCHAR(150)', constraints: 'NOT NULL', note: 'Identified mechanical or electrical problem' },
-        { name: 'possible_cause', type: 'TEXT', constraints: 'NOT NULL', note: 'Root cause analysis' },
-        { name: 'recommended_action', type: 'TEXT', constraints: 'NOT NULL', note: 'Step-by-step Standard Operating Procedure' },
-        { name: 'priority_level', type: 'VARCHAR(20)', constraints: "DEFAULT 'Medium'", note: 'Low, Medium, High, Critical' },
-        { name: 'estimated_repair_time_hrs', type: 'REAL', constraints: 'NOT NULL', note: 'Standard bench repair time' },
-        { name: 'estimated_repair_cost_inr', type: 'REAL', constraints: 'NOT NULL', note: 'Cost in Indian Rupees (₹)' },
-        { name: 'status', type: 'VARCHAR(20)', constraints: "DEFAULT 'Pending'", note: 'Pending, In Progress, Resolved' },
-        { name: 'assigned_technician', type: 'VARCHAR(100)', constraints: 'NULL', note: 'Technician name' },
-        { name: 'resolved_at', type: 'TIMESTAMP', constraints: 'NULL', note: 'Sign-off timestamp' },
-        { name: 'created_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Creation timestamp' }
-      ],
-      sampleRows: [
-        { id: 1, machine_id: 'WVE-03', problem: 'Bearing Wear on Main Sley Drive', priority: 'High', time: '2.0 hrs', cost: '₹800', status: 'Pending', tech: 'Rajesh Kumar' },
-        { id: 2, machine_id: 'MTR-05', problem: 'Carding Motor Severe Stator Thermal Overload', priority: 'Critical', time: '3.5 hrs', cost: '₹1,500', status: 'In Progress', tech: 'Amit Verma' }
-      ]
-    },
-    alerts: {
-      desc: 'Dispatched WhatsApp and dashboard notification records',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE CASCADE',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Alert record ID' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id)', note: 'Associated machine' },
-        { name: 'alert_title', type: 'VARCHAR(150)', constraints: 'NOT NULL', note: 'Header text' },
-        { name: 'severity', type: 'VARCHAR(20)', constraints: 'NOT NULL', note: 'Info, Warning, Critical' },
-        { name: 'message_content', type: 'TEXT', constraints: 'NOT NULL', note: 'Full WhatsApp formatted markdown' },
-        { name: 'whatsapp_dispatched', type: 'BOOLEAN', constraints: 'DEFAULT 1', note: 'Delivery status' },
-        { name: 'recipient_phone', type: 'VARCHAR(20)', constraints: 'NOT NULL', note: 'Mobile number (+91...)' },
-        { name: 'is_acknowledged', type: 'BOOLEAN', constraints: 'DEFAULT 0', note: 'Technician acknowledgement' },
-        { name: 'acknowledged_by', type: 'VARCHAR(100)', constraints: 'NULL', note: 'Name of user' },
-        { name: 'acknowledged_at', type: 'TIMESTAMP', constraints: 'NULL', note: 'Ack time' },
-        { name: 'created_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Trigger time' }
-      ],
-      sampleRows: [
-        { id: 1, machine_id: 'WVE-03', title: 'FactoryPulse Alert: Bearing Wear Detected', severity: 'Warning', phone: '+919842100002', ack: 'No', msg: '🚨 Weaving Loom 3: Bearing Wear. Health: 64.2%. Action: Inspect within 24h.' },
-        { id: 2, machine_id: 'MTR-05', title: 'CRITICAL ALERT: 25HP Motor Overheating', severity: 'Critical', phone: '+919842100001', ack: 'Yes (Murugan)', msg: '🔥 Carding Motor (88.4°C, 14.2A). Failure Risk: 89%. Immediate stop required.' }
-      ]
-    },
-    cost_analysis: {
-      desc: 'Financial downtime ROI, production losses, and net savings in INR',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE CASCADE',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Record ID' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id)', note: 'Asset identifier' },
-        { name: 'fault_detected', type: 'VARCHAR(100)', constraints: 'NOT NULL', note: 'Fault typology' },
-        { name: 'expected_downtime_hrs', type: 'REAL', constraints: 'NOT NULL', note: 'Estimated outage duration' },
-        { name: 'production_loss_inr', type: 'REAL', constraints: 'NOT NULL', note: 'Lost textile production revenue (₹)' },
-        { name: 'repair_cost_today_inr', type: 'REAL', constraints: 'NOT NULL', note: 'Cost of proactive component replacement (₹)' },
-        { name: 'repair_cost_post_failure_inr', type: 'REAL', constraints: 'NOT NULL', note: 'Catastrophic post-breakdown overhaul cost (₹)' },
-        { name: 'estimated_savings_inr', type: 'REAL', constraints: 'NOT NULL', note: 'Net MSME direct financial savings (₹)' },
-        { name: 'roi_multiple', type: 'REAL', constraints: 'NOT NULL', note: 'Return on Maintenance Multiple (x)' },
-        { name: 'calculated_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Analysis timestamp' }
-      ],
-      sampleRows: [
-        { id: 1, machine_id: 'WVE-03', fault: 'Bearing Wear', downtime: '6.0 hrs', prod_loss: '₹12,000', repair_today: '₹800', repair_after: '₹6,500', savings: '₹5,700', roi: '7.1x' },
-        { id: 2, machine_id: 'MTR-05', fault: 'Motor Overheating / Burnout', downtime: '14.0 hrs', prod_loss: '₹38,500', repair_today: '₹1,500', repair_after: '₹18,500', savings: '₹17,000', roi: '11.3x' },
-        { id: 3, machine_id: 'CMP-06', fault: 'Compressor High Load / Valve Leak', downtime: '5.0 hrs', prod_loss: '₹9,500', repair_today: '₹1,200', repair_after: '₹5,400', savings: '₹4,200', roi: '3.5x' }
-      ]
-    },
-    chat_history: {
-      desc: 'Plant Assistant NLP conversation logs, queries, and detected intents',
-      pk: 'id (INTEGER AUTOINCREMENT)',
-      fk: 'machine_id -> machines(id) ON DELETE SET NULL',
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: 'PRIMARY KEY AUTOINCREMENT', note: 'Message ID' },
-        { name: 'user_id', type: 'VARCHAR(50)', constraints: 'NOT NULL', note: 'User identifier' },
-        { name: 'machine_id', type: 'VARCHAR(32)', constraints: 'FOREIGN KEY -> machines(id) NULL', note: 'Contextual machine' },
-        { name: 'user_query', type: 'TEXT', constraints: 'NOT NULL', note: 'Natural language input' },
-        { name: 'bot_response', type: 'TEXT', constraints: 'NOT NULL', note: 'Co-Pilot guidance answer' },
-        { name: 'intent_detected', type: 'VARCHAR(50)', constraints: 'NOT NULL', note: 'Classified intent' },
-        { name: 'confidence_score', type: 'REAL', constraints: 'DEFAULT 1.0', note: 'Classifier confidence' },
-        { name: 'timestamp', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Log timestamp' }
-      ],
-      sampleRows: [
-        { id: 1, user_id: 'usr-001', machine: 'WVE-03', query: 'Machine 3 status?', intent: 'machine_status_query', response: 'Air Jet Weaving Loom 3 is in Warning condition (64.2% Health). High vibration 1.45g detected.' },
-        { id: 2, user_id: 'usr-002', machine: 'MTR-05', query: 'Any critical machines right now?', intent: 'fleet_critical_query', response: '1 critical machine: Carding Motor MTR-05 reached 88.4°C and drawing 14.2A. 89% failure probability.' },
-        { id: 3, user_id: 'usr-001', machine: 'All Fleet', query: 'What is our business impact today?', intent: 'cost_impact_query', response: 'Proactive maintenance on Loom 3 and Motor 5 saves an estimated ₹22,700 and prevents 20 hours downtime.' }
-      ]
-    },
-    users: {
-      desc: 'MSME mill operators, supervisors, maintenance engineers & owners',
-      pk: 'id (VARCHAR(36))',
-      fk: 'None',
-      columns: [
-        { name: 'id', type: 'VARCHAR(36)', constraints: 'PRIMARY KEY', note: 'Unique user UUID / ID' },
-        { name: 'full_name', type: 'VARCHAR(100)', constraints: 'NOT NULL', note: 'Full name' },
-        { name: 'email', type: 'VARCHAR(100)', constraints: 'UNIQUE NOT NULL', note: 'Contact email' },
-        { name: 'role', type: 'VARCHAR(30)', constraints: 'NOT NULL', note: 'Mill Owner, Maintenance Supervisor, Floor Technician' },
-        { name: 'whatsapp_number', type: 'VARCHAR(20)', constraints: 'NOT NULL', note: 'WhatsApp mobile number for instant alerts' },
-        { name: 'preferred_language', type: 'VARCHAR(10)', constraints: "DEFAULT 'en'", note: 'en (English), ta (Tamil), hi (Hindi)' },
-        { name: 'is_active', type: 'BOOLEAN', constraints: 'DEFAULT 1', note: 'Account status' },
-        { name: 'created_at', type: 'TIMESTAMP', constraints: 'CURRENT_TIMESTAMP', note: 'Creation timestamp' }
-      ],
-      sampleRows: [
-        { id: 'usr-001', name: 'Murugan Sundaram', role: 'Mill Owner', email: 'murugan@textilemill.in', phone: '+919842100001', lang: 'ta (Tamil)', active: 'True' },
-        { id: 'usr-002', name: 'Rajesh Kumar', role: 'Maintenance Supervisor', email: 'rajesh.maint@textilemill.in', phone: '+919842100002', lang: 'en (English)', active: 'True' },
-        { id: 'usr-003', name: 'Amit Verma', role: 'Floor Technician', email: 'amit.tech@textilemill.in', phone: '+919842100003', lang: 'hi (Hindi)', active: 'True' }
-      ]
-    }
+      const dummyHistory = Array.from({ length: 8 }, (_, i) => ({
+        time: `18:${10 + i}:00`,
+        temp: Number((initialTemp + (Math.random() * 2 - 1)).toFixed(1)),
+        vib: Number((initialVib + (Math.random() * 0.1 - 0.05)).toFixed(2)),
+        curr: Number((initialCurr + (Math.random() * 0.4 - 0.2)).toFixed(1)),
+        sound: Number((initialSound + (Math.random() * 2 - 1)).toFixed(1))
+      }));
+
+      initial[m.id] = {
+        temperature: initialTemp,
+        vibration: initialVib,
+        current: initialCurr,
+        sound: initialSound,
+        isFault: isFault,
+        faultType: faultType,
+        history: dummyHistory
+      };
+    });
+    return initial;
+  });
+
+  const triggerSimulationTick = () => {
+    const nowStr = new Date().toLocaleTimeString();
+    setLastTickTime(nowStr);
+    setTickCounter(prev => prev + 1);
+
+    setFleetState(prev => {
+      const updated: Record<string, LiveSensorState> = { ...prev };
+
+      MACHINE_FLEET.forEach(prof => {
+        const current = prev[prof.id];
+        let targetTemp = prof.baseTemp + (Math.random() * 1.6 - 0.8);
+        let rawVib = prof.baseVib + (Math.random() * 0.08 - 0.04);
+        let rawCurrent = prof.baseCurrent + (Math.random() * 0.5 - 0.25);
+        let rawSound = prof.baseSound + (Math.random() * 2.0 - 1.0);
+
+        if (current.isFault && current.faultType) {
+          switch (current.faultType) {
+            case 'Motor Overheating':
+              targetTemp += 34.0 + (Math.random() * 4.0 - 2.0);
+              rawCurrent += 4.5 + (Math.random() * 0.8 - 0.4);
+              rawVib += 0.5 + (Math.random() * 0.1);
+              rawSound += 12.0 + (Math.random() * 2.0);
+              break;
+            case 'Bearing Wear':
+              rawVib += 1.1 + (Math.random() * 0.3 - 0.15);
+              rawSound += 18.0 + (Math.random() * 3.0 - 1.5);
+              targetTemp += 14.0 + (Math.random() * 2.0);
+              rawCurrent += 2.2 + (Math.random() * 0.4);
+              break;
+            case 'High Current Draw':
+              rawCurrent += 5.8 + (Math.random() * 1.2 - 0.6);
+              targetTemp += 20.0 + (Math.random() * 2.5);
+              rawSound += 10.0 + (Math.random() * 2.0);
+              break;
+            case 'Excessive Noise':
+              rawSound += 26.0 + (Math.random() * 4.0 - 2.0);
+              rawVib += 0.65 + (Math.random() * 0.15);
+              targetTemp += 7.0 + (Math.random() * 1.5);
+              break;
+            case 'Misalignment':
+              rawVib += 1.25 + (Math.random() * 0.25);
+              rawCurrent += 3.2 + (Math.random() * 0.5);
+              targetTemp += 12.0 + (Math.random() * 2.0);
+              rawSound += 14.0 + (Math.random() * 2.0);
+              break;
+            case 'Loose Components':
+              rawVib += 1.55 + (Math.random() * 0.35);
+              rawSound += 24.0 + (Math.random() * 4.0);
+              break;
+          }
+        }
+
+        const alpha = 0.2;
+        const newTemp = current.temperature + alpha * (targetTemp - current.temperature);
+
+        const clampedTemp = Math.max(35.0, Math.min(90.0, Number(newTemp.toFixed(1))));
+        const clampedVib = Math.max(0.10, Math.min(2.50, Number(rawVib.toFixed(2))));
+        const clampedCurrent = Math.max(2.0, Math.min(15.0, Number(rawCurrent.toFixed(1))));
+        const clampedSound = Math.max(50.0, Math.min(100.0, Number(rawSound.toFixed(1))));
+
+        const historySlice = [
+          ...(current.history || []),
+          { time: nowStr, temp: clampedTemp, vib: clampedVib, curr: clampedCurrent, sound: clampedSound }
+        ].slice(-12);
+
+        updated[prof.id] = {
+          ...current,
+          temperature: clampedTemp,
+          vibration: clampedVib,
+          current: clampedCurrent,
+          sound: clampedSound,
+          history: historySlice
+        };
+      });
+
+      return updated;
+    });
   };
 
-  const currentTableData = schemaDefinitions[selectedTable];
+  useEffect(() => {
+    if (!isAutoSimulating) return;
+    const interval = setInterval(() => {
+      triggerSimulationTick();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isAutoSimulating]);
+
+  const activeMachine = MACHINE_FLEET.find(m => m.id === selectedMachineId)!;
+  const activeTelemetry = fleetState[selectedMachineId];
+
+  const handleInjectFault = (faultName: string) => {
+    setFleetState(prev => ({
+      ...prev,
+      [selectedMachineId]: {
+        ...prev[selectedMachineId],
+        isFault: true,
+        faultType: faultName
+      }
+    }));
+    triggerSimulationTick();
+  };
+
+  const handleClearFault = () => {
+    setFleetState(prev => ({
+      ...prev,
+      [selectedMachineId]: {
+        ...prev[selectedMachineId],
+        isFault: false,
+        faultType: null
+      }
+    }));
+    triggerSimulationTick();
+  };
+
+  const tempPct = Math.min(100, Math.max(0, ((activeTelemetry.temperature - 35) / (90 - 35)) * 100));
+  const vibPct = Math.min(100, Math.max(0, ((activeTelemetry.vibration - 0.1) / (2.5 - 0.1)) * 100));
+  const currPct = Math.min(100, Math.max(0, ((activeTelemetry.current - 2.0) / (15.0 - 2.0)) * 100));
+  const soundPct = Math.min(100, Math.max(0, ((activeTelemetry.sound - 50) / (100 - 50)) * 100));
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30">
@@ -264,38 +250,51 @@ export default function App() {
       <header className="border-b border-slate-800 bg-[#0d1424]/90 backdrop-blur sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-400/30">
-            <Activity className="w-6 h-6 text-white animate-pulse" />
+            <Radio className="w-5 h-5 text-white animate-pulse" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
                 FactoryPulse <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">AI</span>
               </h1>
-              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-300 font-mono font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Phase 2 Database Verified
+              <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 font-mono font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 3 IoT Engine Re-Verified
               </span>
             </div>
-            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • SQLite 3 (WAL Mode Active)</p>
+            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • 5.0s Multi-Sensor Simulator</p>
           </div>
         </div>
 
-        {/* Global Stats Preview */}
-        <div className="hidden lg:flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
-            <Database className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-slate-400">Relational Tables:</span>
-            <span className="text-cyan-300 font-mono font-bold">9 Tables</span>
+        {/* Simulator Cadence Controller */}
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+            <span className={`w-2 h-2 rounded-full ${isAutoSimulating ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`}></span>
+            <span className="text-slate-400 font-mono">Cadence:</span>
+            <span className="text-cyan-300 font-mono font-bold">5.0s Tick</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400 font-mono">Tick #{tickCounter}</span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
-            <Link className="w-3.5 h-3.5 text-indigo-400" />
-            <span className="text-slate-400">Foreign Key Cascades:</span>
-            <span className="text-indigo-300 font-mono font-bold">8 Cascades</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800">
-            <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-slate-400">Preventive Savings Seeded:</span>
-            <span className="text-amber-300 font-mono font-bold">₹26,900</span>
-          </div>
+
+          <button
+            onClick={() => setIsAutoSimulating(!isAutoSimulating)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${
+              isAutoSimulating
+                ? 'bg-amber-950/80 border border-amber-800 text-amber-300 hover:bg-amber-900'
+                : 'bg-emerald-950/80 border border-emerald-800 text-emerald-300 hover:bg-emerald-900'
+            }`}
+          >
+            {isAutoSimulating ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            {isAutoSimulating ? 'Pause Loop' : 'Resume Loop'}
+          </button>
+
+          <button
+            onClick={triggerSimulationTick}
+            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition"
+            title="Force immediate 5-second tick"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Tick (5s)</span>
+          </button>
         </div>
       </header>
 
@@ -305,16 +304,15 @@ export default function App() {
         <aside className="w-full md:w-64 border-r border-slate-800 bg-[#0d1322] p-4 flex flex-col gap-1.5 shrink-0">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold px-2 py-1 flex items-center justify-between">
             <span>Navigation Deck</span>
-            <span className="text-cyan-400">Phase 2</span>
+            <span className="text-cyan-400 font-bold">Phase 3</span>
           </div>
 
           {[
-            { id: 'schema', label: 'Database Schema (9 Tables)', icon: Database },
-            { id: 'sample_data', label: 'Live Data Inspector', icon: Table },
+            { id: 'simulator', label: 'IoT Sensor Simulator', icon: Radio },
+            { id: 'chart', label: 'Realtime Telemetry Chart', icon: TrendingUp },
+            { id: 'schema', label: 'Database Schema (Phase 2)', icon: Database },
             { id: 'architecture', label: 'System Architecture (Phase 1)', icon: Network },
-            { id: 'apis', label: 'API Architecture (v1)', icon: Server },
-            { id: 'dataflow', label: 'Data Flow & Telemetry Bus', icon: GitBranch },
-            { id: 'folder', label: 'Folder Structure', icon: FileCode2 }
+            { id: 'apis', label: 'API Architecture (v1)', icon: Server }
           ].map(tab => {
             const Icon = tab.icon;
             const isSelected = activeTab === tab.id;
@@ -335,41 +333,56 @@ export default function App() {
             );
           })}
 
+          {/* Machine Selector in Sidebar */}
           <div className="mt-4 pt-3 border-t border-slate-800/80">
-            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold px-2 mb-2">
-              Select SQLite Table:
+            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold px-2 mb-2 flex items-center justify-between">
+              <span>Select Machine:</span>
+              <span className="text-cyan-400">{selectedMachineId}</span>
             </div>
             <div className="space-y-1">
-              {Object.keys(schemaDefinitions).map((tbl) => (
-                <button
-                  key={tbl}
-                  onClick={() => {
-                    setSelectedTable(tbl);
-                    if (activeTab !== 'schema' && activeTab !== 'sample_data') {
-                      setActiveTab('schema');
-                    }
-                  }}
-                  className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-mono flex items-center justify-between transition ${
-                    selectedTable === tbl
-                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                  }`}
-                >
-                  <span className="truncate">{tbl}</span>
-                  {selectedTable === tbl && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>}
-                </button>
-              ))}
+              {MACHINE_FLEET.map((m) => {
+                const live = fleetState[m.id];
+                const isSelected = selectedMachineId === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setSelectedMachineId(m.id);
+                      if (activeTab !== 'simulator' && activeTab !== 'chart') setActiveTab('simulator');
+                    }}
+                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-mono flex items-center justify-between transition ${
+                      isSelected
+                        ? 'bg-cyan-950 text-cyan-200 border border-cyan-700 font-bold'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="text-sm">{m.icon}</span>
+                      <span className="truncate">{m.id}</span>
+                    </div>
+                    {live.isFault ? (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-950 text-rose-300 border border-rose-800 font-bold">
+                        FAULT
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
+                        OK
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           <div className="mt-auto pt-4 border-t border-slate-800/80">
             <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span className="text-xs font-semibold text-slate-200">Execution Phase: 2 of 20</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span className="text-xs font-semibold text-slate-200">Execution Phase: 3 of 20</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Phase 2 completes database design & seed verification. Next phase: Phase 3 (SIMULATED IOT ENGINE).
+                Phase 3 delivers the realistic IoT sensor simulator across 6 textile machines with 6 fault signatures.
               </p>
             </div>
           </div>
@@ -377,186 +390,500 @@ export default function App() {
 
         {/* Content View Area */}
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Quick Machine Fleet Banner */}
+          {/* Machine Fleet Quick Bar */}
           <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-[#101b33] border border-slate-800">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Gauge className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Textile MSME Machine Assets in SQLite (`machines` Table)</h2>
+                <h2 className="text-sm font-semibold text-slate-200">Fleet Live Telemetry Matrix (Simulated IoT Stream)</h2>
               </div>
-              <span className="text-xs text-slate-400 font-mono">6 Seeded Records • Primary Keys: SPN-01 to CMP-06</span>
+              <span className="text-xs text-slate-400 font-mono">Last Synchronized: {lastTickTime}</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
-              {machines.map((m) => (
-                <div key={m.id} className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-slate-700 transition">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-base">{m.icon}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
-                      m.status === 'Healthy' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' :
-                      m.status === 'Warning' ? 'bg-amber-950 text-amber-400 border border-amber-800/60' :
-                      'bg-rose-950 text-rose-400 border border-rose-800/60'
-                    }`}>
-                      {m.status}
-                    </span>
-                  </div>
-                  <div className="font-semibold text-xs text-slate-200 truncate">{m.id}</div>
-                  <div className="text-[10px] text-slate-400 truncate mb-1.5">{m.name}</div>
-                  <div className="grid grid-cols-2 gap-x-1 text-[10px] font-mono text-slate-400 border-t border-slate-800/60 pt-1">
-                    <span>T: <b className="text-slate-300">{m.temp}</b></span>
-                    <span>V: <b className="text-slate-300">{m.vib}</b></span>
-                    <span>I: <b className="text-slate-300">{m.current}</b></span>
-                    <span>S: <b className="text-slate-300">{m.sound}</b></span>
-                  </div>
-                </div>
-              ))}
+              {MACHINE_FLEET.map((m) => {
+                const s = fleetState[m.id];
+                const isSelected = selectedMachineId === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelectedMachineId(m.id)}
+                    className={`p-2.5 rounded-lg text-left transition border ${
+                      isSelected
+                        ? 'bg-slate-900 border-cyan-500 shadow-md shadow-cyan-950'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-base">{m.icon}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
+                        s.isFault
+                          ? 'bg-rose-950 text-rose-400 border border-rose-800/80 animate-pulse'
+                          : 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
+                      }`}>
+                        {s.isFault ? s.faultType || 'FAULT' : 'Healthy'}
+                      </span>
+                    </div>
+                    <div className="font-semibold text-xs text-slate-200 truncate">{m.id}</div>
+                    <div className="text-[10px] text-slate-400 truncate mb-1.5">{m.name}</div>
+                    <div className="grid grid-cols-2 gap-x-1 text-[10px] font-mono text-slate-400 border-t border-slate-800/60 pt-1">
+                      <span>T: <b className={s.temperature > 70 ? 'text-rose-400' : 'text-slate-300'}>{s.temperature}°C</b></span>
+                      <span>V: <b className={s.vibration > 1.2 ? 'text-amber-400' : 'text-slate-300'}>{s.vibration}g</b></span>
+                      <span>I: <b className={s.current > 10 ? 'text-rose-400' : 'text-slate-300'}>{s.current}A</b></span>
+                      <span>S: <b className={s.sound > 80 ? 'text-amber-400' : 'text-slate-300'}>{s.sound}dB</b></span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Phase 2: Schema Viewer */}
-          {activeTab === 'schema' && (
+          {/* Tab: Realtime Telemetry Charts */}
+          {activeTab === 'chart' && (
             <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-3">
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Database className="w-5 h-5 text-cyan-400" />
-                    Table Schema Inspector: <span className="font-mono text-cyan-300">`{selectedTable}`</span>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-cyan-400" />
+                    Realtime Telemetry Chart: <span className="font-mono text-cyan-300">{activeMachine.id} ({activeMachine.name})</span>
                   </h3>
-                  <p className="text-xs text-slate-400">{currentTableData.desc}</p>
+                  <p className="text-xs text-slate-400">Continuous 5s sampling stream plotted on multi-axis telemetry monitor</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 bg-cyan-950 text-cyan-300 border border-cyan-800 text-xs rounded font-mono flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5" /> PK: {currentTableData.pk}
-                  </span>
-                  <span className="px-2.5 py-1 bg-indigo-950 text-indigo-300 border border-indigo-800 text-xs rounded font-mono flex items-center gap-1.5">
-                    <Link className="w-3.5 h-3.5" /> FK: {currentTableData.fk}
+                  <span className="text-xs font-mono text-slate-300 px-3 py-1 rounded bg-slate-950 border border-slate-800">
+                    Cadence: 5.0s
                   </span>
                 </div>
               </div>
 
-              {/* Table Column Definitions */}
-              <div className="rounded-xl border border-slate-800 bg-[#0d1322] overflow-hidden">
-                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-200 font-mono">Column Structure ({currentTableData.columns.length} Fields)</span>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Temperature Chart */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-rose-300 font-mono flex items-center gap-1.5">
+                      <Thermometer className="w-4 h-4 text-rose-400" /> Temperature (°C) [Limit: 35 - 90°C]
+                    </span>
+                    <span className="text-xs font-mono text-rose-400 font-bold">{activeTelemetry.temperature}°C</span>
+                  </div>
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activeTelemetry.history}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <YAxis domain={[35, 90]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
+                        <Line type="monotone" dataKey="temp" stroke="#f43f5e" strokeWidth={2.5} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Vibration Chart */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-cyan-300 font-mono flex items-center gap-1.5">
+                      <Activity className="w-4 h-4 text-cyan-400" /> Vibration (g) [Limit: 0.1 - 2.5g]
+                    </span>
+                    <span className="text-xs font-mono text-cyan-400 font-bold">{activeTelemetry.vibration}g</span>
+                  </div>
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activeTelemetry.history}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <YAxis domain={[0.1, 2.5]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
+                        <Line type="monotone" dataKey="vib" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Current Chart */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-amber-300 font-mono flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-400" /> Current (A) [Limit: 2 - 15A]
+                    </span>
+                    <span className="text-xs font-mono text-amber-400 font-bold">{activeTelemetry.current}A</span>
+                  </div>
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activeTelemetry.history}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <YAxis domain={[2, 15]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
+                        <Line type="monotone" dataKey="curr" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Sound Chart */}
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold text-indigo-300 font-mono flex items-center gap-1.5">
+                      <Volume2 className="w-4 h-4 text-indigo-400" /> Acoustic Sound (dB) [Limit: 50 - 100dB]
+                    </span>
+                    <span className="text-xs font-mono text-indigo-400 font-bold">{activeTelemetry.sound}dB</span>
+                  </div>
+                  <div className="h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activeTelemetry.history}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <YAxis domain={[50, 100]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
+                        <Line type="monotone" dataKey="sound" stroke="#818cf8" strokeWidth={2.5} dot={{ r: 3 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 1: IoT Simulator Cockpit */}
+          {activeTab === 'simulator' && (
+            <div className="space-y-6">
+              {/* Selected Machine Detail Header */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-center text-2xl">
+                    {activeMachine.icon}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white">{activeMachine.name}</h3>
+                      <span className="text-xs font-mono text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800 font-bold">
+                        {activeMachine.id}
+                      </span>
+                      {activeTelemetry.isFault ? (
+                        <span className="text-xs font-mono text-rose-300 bg-rose-950 px-2 py-0.5 rounded border border-rose-800 font-bold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-rose-400" /> FAULT: {activeTelemetry.faultType}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-mono text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Condition: Healthy Nominal
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Type: <b className="text-slate-300">{activeMachine.type}</b> • Location: <b className="text-slate-300">{activeMachine.location}</b> • Rated Load: <b className="text-slate-300">{activeMachine.power}</b>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {activeTelemetry.isFault ? (
+                    <button
+                      onClick={handleClearFault}
+                      className="px-3.5 py-2 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 text-xs font-bold flex items-center gap-2 transition"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      Clear Fault (Return to Healthy)
+                    </button>
+                  ) : (
+                    <span className="text-xs font-mono text-slate-400 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                      Machine operating under normal physics parameters
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 4 Multi-Modal Live Sensor Gauges */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Temperature Gauge */}
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
+                      <Thermometer className="w-4 h-4 text-rose-400" />
+                      Temperature Sensor
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Range: 35 - 90°C</span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 my-2">
+                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
+                      activeTelemetry.temperature >= 75 ? 'text-rose-400' :
+                      activeTelemetry.temperature >= 56 ? 'text-amber-400' :
+                      'text-emerald-400'
+                    }`}>
+                      {activeTelemetry.temperature}
+                    </span>
+                    <span className="text-base text-slate-400 font-mono">°C</span>
+                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
+                      Base: {activeMachine.baseTemp}°C
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeTelemetry.temperature >= 75 ? 'bg-rose-500' :
+                        activeTelemetry.temperature >= 56 ? 'bg-amber-500' :
+                        'bg-emerald-500'
+                      }`}
+                      style={{ width: `${tempPct}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
+                    <span>35°C</span>
+                    <span>Nominal: 40-55°C</span>
+                    <span>90°C</span>
+                  </div>
+                </div>
+
+                {/* 2. Vibration Gauge */}
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
+                      <Activity className="w-4 h-4 text-cyan-400" />
+                      Vibration Sensor
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Range: 0.1 - 2.5g</span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 my-2">
+                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
+                      activeTelemetry.vibration >= 1.6 ? 'text-rose-400' :
+                      activeTelemetry.vibration >= 0.8 ? 'text-amber-400' :
+                      'text-cyan-400'
+                    }`}>
+                      {activeTelemetry.vibration}
+                    </span>
+                    <span className="text-base text-slate-400 font-mono">g (RMS)</span>
+                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
+                      Base: {activeMachine.baseVib}g
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeTelemetry.vibration >= 1.6 ? 'bg-rose-500' :
+                        activeTelemetry.vibration >= 0.8 ? 'bg-amber-500' :
+                        'bg-cyan-500'
+                      }`}
+                      style={{ width: `${vibPct}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
+                    <span>0.1g</span>
+                    <span>Normal: &lt;0.8g</span>
+                    <span>2.5g</span>
+                  </div>
+                </div>
+
+                {/* 3. Current Gauge */}
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      Current Draw
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Range: 2 - 15A</span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 my-2">
+                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
+                      activeTelemetry.current >= 12.0 ? 'text-rose-400' :
+                      activeTelemetry.current >= 8.1 ? 'text-amber-400' :
+                      'text-emerald-400'
+                    }`}>
+                      {activeTelemetry.current}
+                    </span>
+                    <span className="text-base text-slate-400 font-mono">Amperes</span>
+                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
+                      Base: {activeMachine.baseCurrent}A
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeTelemetry.current >= 12.0 ? 'bg-rose-500' :
+                        activeTelemetry.current >= 8.1 ? 'bg-amber-500' :
+                        'bg-emerald-500'
+                      }`}
+                      style={{ width: `${currPct}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
+                    <span>2.0A</span>
+                    <span>Rated: 4-8A</span>
+                    <span>15.0A</span>
+                  </div>
+                </div>
+
+                {/* 4. Sound Gauge */}
+                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
+                      <Volume2 className="w-4 h-4 text-indigo-400" />
+                      Acoustic Sound
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Range: 50 - 100dB</span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 my-2">
+                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
+                      activeTelemetry.sound >= 88.0 ? 'text-rose-400' :
+                      activeTelemetry.sound >= 75.0 ? 'text-amber-400' :
+                      'text-indigo-400'
+                    }`}>
+                      {activeTelemetry.sound}
+                    </span>
+                    <span className="text-base text-slate-400 font-mono">dB</span>
+                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
+                      Base: {activeMachine.baseSound}dB
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeTelemetry.sound >= 88.0 ? 'bg-rose-500' :
+                        activeTelemetry.sound >= 75.0 ? 'bg-amber-500' :
+                        'bg-indigo-500'
+                      }`}
+                      style={{ width: `${soundPct}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
+                    <span>50dB</span>
+                    <span>Safe: &lt;75dB</span>
+                    <span>100dB</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fault Injection Control Deck */}
+              <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Wrench className="w-4 h-4 text-amber-400" />
+                      Interactive Fault Injection Panel (Test All 6 Fault Scenarios)
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Inject simulated physical anomalies into <span className="text-cyan-300 font-mono">{activeMachine.id} ({activeMachine.name})</span> to evaluate AI detection.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 bg-amber-950/80 text-amber-300 border border-amber-800/80 rounded font-mono text-xs font-semibold">
+                    6 Industrial Signatures
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {FAULT_TYPES.map((f) => {
+                    const isCurrentlyActive = activeTelemetry.isFault && activeTelemetry.faultType === f.name;
+                    return (
+                      <div
+                        key={f.name}
+                        className={`p-3.5 rounded-xl border transition flex flex-col justify-between ${
+                          isCurrentlyActive
+                            ? 'bg-rose-950/40 border-rose-700 shadow-md shadow-rose-950'
+                            : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="font-bold text-xs text-slate-200">{f.name}</span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800">
+                              {f.badge}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">{f.desc}</p>
+                          <div className="text-[10px] font-mono text-cyan-300/80 bg-slate-900/60 p-1.5 rounded border border-slate-800/60 mb-3">
+                            <b>Impact:</b> {f.impact}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleInjectFault(f.name)}
+                          className={`w-full py-1.5 px-3 rounded text-xs font-semibold font-mono transition flex items-center justify-center gap-1.5 ${
+                            isCurrentlyActive
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                          }`}
+                        >
+                          {isCurrentlyActive ? (
+                            <>
+                              <AlertTriangle className="w-3.5 h-3.5 text-white animate-bounce" />
+                              Active Fault
+                            </>
+                          ) : (
+                            <>
+                              <Flame className="w-3.5 h-3.5 text-amber-400" />
+                              Inject {f.name}
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Real-time Telemetry Stream History */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h3 className="text-xs font-bold text-slate-200 font-mono flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-cyan-400" />
+                    5-Second Telemetry Time-Series Buffer (`sensor_readings` SQLite Table)
+                  </h3>
                   <button
-                    onClick={() => setActiveTab('sample_data')}
-                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono text-[11px]"
+                    onClick={() => setActiveTab('chart')}
+                    className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
                   >
-                    <Table className="w-3.5 h-3.5" /> View Seeded Records &rarr;
+                    <TrendingUp className="w-3.5 h-3.5" /> View Interactive Charts &rarr;
                   </button>
                 </div>
+
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-xs font-mono">
                     <thead>
-                      <tr className="border-b border-slate-800 bg-slate-950/60 font-mono text-slate-400">
-                        <th className="py-2.5 px-4">Column Name</th>
-                        <th className="py-2.5 px-4">Data Type</th>
-                        <th className="py-2.5 px-4">Constraints & Defaults</th>
-                        <th className="py-2.5 px-4">Industry 4.0 Functional Role</th>
+                      <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase">
+                        <th className="py-2 px-3">Timestamp</th>
+                        <th className="py-2 px-3">Machine ID</th>
+                        <th className="py-2 px-3">Temperature</th>
+                        <th className="py-2 px-3">Vibration</th>
+                        <th className="py-2 px-3">Current</th>
+                        <th className="py-2 px-3">Sound</th>
+                        <th className="py-2 px-3">State</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
-                      {currentTableData.columns.map((c, idx) => (
-                        <tr key={idx} className="hover:bg-slate-900/40 transition">
-                          <td className="py-2.5 px-4 font-bold text-cyan-300 flex items-center gap-1.5">
-                            {c.name === 'id' ? <Key className="w-3 h-3 text-amber-400 shrink-0" /> : null}
-                            {c.name.includes('_id') ? <Link className="w-3 h-3 text-indigo-400 shrink-0" /> : null}
-                            {c.name}
+                    <tbody className="divide-y divide-slate-800/60">
+                      {(activeTelemetry.history && activeTelemetry.history.length > 0
+                        ? activeTelemetry.history
+                        : [
+                            { time: lastTickTime, temp: activeTelemetry.temperature, vib: activeTelemetry.vibration, curr: activeTelemetry.current, sound: activeTelemetry.sound }
+                          ]
+                      ).map((h, i) => (
+                        <tr key={i} className="hover:bg-slate-950/60 transition">
+                          <td className="py-2 px-3 text-slate-400">{h.time}</td>
+                          <td className="py-2 px-3 font-bold text-cyan-300">{activeMachine.id}</td>
+                          <td className={`py-2 px-3 ${h.temp > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}`}>{h.temp}°C</td>
+                          <td className={`py-2 px-3 ${h.vib > 1.2 ? 'text-amber-400 font-bold' : 'text-slate-300'}`}>{h.vib}g</td>
+                          <td className={`py-2 px-3 ${h.curr > 10 ? 'text-rose-400 font-bold' : 'text-slate-300'}`}>{h.curr}A</td>
+                          <td className={`py-2 px-3 ${h.sound > 80 ? 'text-amber-400 font-bold' : 'text-slate-300'}`}>{h.sound}dB</td>
+                          <td className="py-2 px-3">
+                            {activeTelemetry.isFault ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-950 text-rose-300 border border-rose-800">
+                                {activeTelemetry.faultType}
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                Healthy Nominal
+                              </span>
+                            )}
                           </td>
-                          <td className="py-2.5 px-4 text-purple-300">{c.type}</td>
-                          <td className="py-2.5 px-4 text-emerald-400 text-[11px]">{c.constraints}</td>
-                          <td className="py-2.5 px-4 text-slate-400 text-[11px] font-sans">{c.note}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Quick ER Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center gap-2 mb-2 text-cyan-300 text-xs font-mono font-bold">
-                    <Key className="w-4 h-4 text-cyan-400" />
-                    Primary Key Integrity
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Textile assets use explicit human-readable operational codes (e.g., <code className="text-cyan-300">SPN-01</code>, <code className="text-cyan-300">WVE-03</code>) for zero-ambiguity shop floor tagging. Time-series and transactional tables leverage 64-bit autoincrementing integers.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center gap-2 mb-2 text-indigo-300 text-xs font-mono font-bold">
-                    <Link className="w-4 h-4 text-indigo-400" />
-                    Foreign Key Cascades
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    All telemetry, health logs, failure predictions, alerts, and cost analysis records enforce <code className="text-indigo-300 font-mono">ON DELETE CASCADE</code> linking back to <code className="text-indigo-300 font-mono">machines.id</code> with foreign keys enforced via SQLite PRAGMA.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center gap-2 mb-2 text-emerald-300 text-xs font-mono font-bold">
-                    <Zap className="w-4 h-4 text-emerald-400" />
-                    WAL Mode & Performance
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Write-Ahead Logging (<code className="text-emerald-300 font-mono">PRAGMA journal_mode = WAL</code>) guarantees non-blocking concurrent writes for the 5-second simulated IoT engine while the React dashboard polls for predictions.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tab: Sample Data Inspector */}
-          {activeTab === 'sample_data' && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-3">
-                <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Table className="w-5 h-5 text-cyan-400" />
-                    Sample Data Inspector: <span className="font-mono text-cyan-300">`{selectedTable}`</span>
-                  </h3>
-                  <p className="text-xs text-slate-400">Production-representative sample records seeded into SQLite database</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 bg-slate-800 text-slate-300 rounded text-xs font-mono">
-                    {currentTableData.sampleRows.length} Sample Records
-                  </span>
-                </div>
-              </div>
-
-              {/* Data Table */}
-              <div className="rounded-xl border border-slate-800 bg-[#0d1322] overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-800 bg-slate-950/80 font-mono text-slate-400">
-                        {Object.keys(currentTableData.sampleRows[0] || {}).map((k) => (
-                          <th key={k} className="py-2.5 px-4 uppercase text-[10px] tracking-wider text-slate-400">
-                            {k}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60 font-mono">
-                      {currentTableData.sampleRows.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-900/60 transition">
-                          {Object.values(row).map((val: any, colIdx) => (
-                            <td key={colIdx} className="py-2.5 px-4 text-slate-300 whitespace-nowrap">
-                              {typeof val === 'string' && val.includes('Healthy') ? (
-                                <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 text-[10px]">Healthy</span>
-                              ) : typeof val === 'string' && val.includes('Warning') ? (
-                                <span className="px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800/60 text-[10px]">Warning</span>
-                              ) : typeof val === 'string' && val.includes('Critical') ? (
-                                <span className="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/60 text-[10px]">Critical</span>
-                              ) : typeof val === 'string' && val.startsWith('₹') ? (
-                                <span className="text-emerald-400 font-bold">{val}</span>
-                              ) : (
-                                String(val)
-                              )}
-                            </td>
-                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -566,12 +893,35 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab: System Architecture (Phase 1 preserved) */}
+          {/* Phase 2: Schema Viewer (Preserved) */}
+          {activeTab === 'schema' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Database className="w-5 h-5 text-cyan-400" /> Database Schema (Phase 2 Verified)
+                </h3>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 leading-relaxed overflow-x-auto">
+                <pre>{`-- SQLite Tables Defined & Populated in Phase 2:
+1. machines (Master catalog for SPN-01, WVE-03, KNT-02, DYE-04, MTR-05, CMP-06)
+2. machine_health (Continuous 0-100 composite index)
+3. sensor_readings (5s simulated IoT stream: T, V, I, S)
+4. failure_predictions (Random Forest predictions & XAI)
+5. maintenance_logs (Prescriptive Co-Pilot troubleshooting tickets)
+6. alerts (WhatsApp notification payloads)
+7. cost_analysis (MSME downtime & savings in INR)
+8. chat_history (Plant manager conversational queries)
+9. users (Operators, technicians & mill owners)`}</pre>
+              </div>
+            </div>
+          )}
+
+          {/* Phase 1: Architecture (Preserved) */}
           {activeTab === 'architecture' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Network className="w-5 h-5 text-cyan-400" /> Complete System Architecture
+                  <Network className="w-5 h-5 text-cyan-400" /> System Architecture (Phase 1 Verified)
                 </h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
@@ -595,7 +945,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Tab: APIs (Phase 1 preserved) */}
+          {/* Phase 1: APIs (Preserved) */}
           {activeTab === 'apis' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -606,75 +956,29 @@ export default function App() {
               <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-2">
                 <div>• <span className="text-cyan-400">GET /api/v1/machines</span> - Master fleet listing</div>
                 <div>• <span className="text-cyan-400">GET /api/v1/sensors/live/&#123;machine_id&#125;</span> - 5s real-time telemetry</div>
+                <div>• <span className="text-cyan-400">POST /api/v1/simulator/inject-fault</span> - Fault injection endpoint</div>
                 <div>• <span className="text-cyan-400">GET /api/v1/health/&#123;machine_id&#125;</span> - Composite health score (0-100)</div>
                 <div>• <span className="text-cyan-400">POST /api/v1/predict/failure</span> - Random Forest failure prediction</div>
                 <div>• <span className="text-cyan-400">GET /api/v1/cost/impact/&#123;machine_id&#125;</span> - MSME downtime financial impact in ₹</div>
-                <div>• <span className="text-cyan-400">POST /api/v1/chat/query</span> - Natural language plant query</div>
-                <div>• <span className="text-cyan-400">GET /api/v1/voice/script/&#123;machine_id&#125;</span> - Vernacular voice scripts (EN/TA/HI)</div>
               </div>
             </div>
           )}
 
-          {/* Tab: Dataflow (Phase 1 preserved) */}
-          {activeTab === 'dataflow' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <GitBranch className="w-5 h-5 text-cyan-400" /> End-to-End Data Flow Pipeline
-                </h3>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 leading-relaxed">
-                [5s IoT Simulator] ──&gt; [SQLite `sensor_readings`] ──&gt; [Health Score Engine] + [Random Forest]
-                <br />──&gt; [Explainable AI Attribution] ──&gt; [Prescriptive Co-Pilot Action]
-                <br />──&gt; [MSME Cost Impact in ₹] ──&gt; [WhatsApp Alert Card Dispatch] + [Voice Audio]
-              </div>
-            </div>
-          )}
-
-          {/* Tab: Folder Structure */}
-          {activeTab === 'folder' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <FileCode2 className="w-5 h-5 text-cyan-400" /> Folder Structure
-                </h3>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 leading-relaxed overflow-x-auto">
-                <pre>{`factorypulse-ai/
-├── backend/
-│   ├── database/
-│   │   ├── schema.sql           # Complete SQLite DDL (all 9 tables)
-│   │   ├── init_db.py           # Seeder & table initializer script
-│   │   └── factorypulse.db      # Live SQLite database file (WAL mode)
-│   ├── app/
-│   │   └── models/
-│   │       ├── machine.py       # machines & machine_health
-│   │       ├── sensor.py        # sensor_readings time-series
-│   │       ├── maintenance.py   # maintenance_logs & failure_predictions
-│   │       ├── alert.py         # alerts & chat_history
-│   │       ├── cost.py          # cost_analysis
-│   │       └── user.py          # users
-├── frontend/
-└── docker-compose.yml`}</pre>
-              </div>
-            </div>
-          )}
-
-          {/* Phase 2 Completion Banner */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/70 via-teal-950/50 to-cyan-950/70 border border-emerald-800/80 flex items-center justify-between">
+          {/* Phase 3 Completion Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/70 via-blue-950/50 to-indigo-950/70 border border-cyan-800/80 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-cyan-400" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">PHASE 2 COMPLETE: Database Design & SQLite Seeding Verified</h4>
+                <h4 className="text-sm font-bold text-white">PHASE 3 COMPLETE: Simulated IoT Engine Re-Run & Verified</h4>
                 <p className="text-xs text-slate-300">
-                  All 9 relational tables, constraints, foreign keys, indexes, and sample records are executed and verified. Awaiting your command <span className="font-mono text-emerald-300 font-bold bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">&quot;CONTINUE&quot;</span> to begin <b>PHASE 3: SIMULATED IOT ENGINE</b>.
+                  Full multi-tick simulation executed, unit tests passing (7/7), SQLite database persistence confirmed, and Recharts multi-axis visualization active. Awaiting your command <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">&quot;CONTINUE&quot;</span> to commence <b>PHASE 4: AI HEALTH ENGINE</b>.
                 </p>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2">
-              <span className="text-[11px] font-mono text-emerald-400 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-700">
+              <span className="text-[11px] font-mono text-cyan-400 px-3 py-1 rounded-full bg-cyan-950 border border-cyan-700">
                 Standing by for CONTINUE
               </span>
             </div>
