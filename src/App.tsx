@@ -49,6 +49,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import ExplainableAIEngine from './components/ExplainableAIEngine';
 
 interface MachineProfile {
   id: string;
@@ -231,7 +232,7 @@ function runRandomForestInference(temp: number, vib: number, curr: number, sound
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'prediction' | 'health' | 'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('prediction');
+  const [activeTab, setActiveTab] = useState<'xai' | 'prediction' | 'health' | 'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('xai');
   const [selectedMachineId, setSelectedMachineId] = useState<string>('WVE-03');
   const [isAutoSimulating, setIsAutoSimulating] = useState<boolean>(true);
   const [tickCounter, setTickCounter] = useState<number>(172);
@@ -485,10 +486,10 @@ export default function App() {
                 FactoryPulse <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">AI</span>
               </h1>
               <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 font-mono font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 5 Failure Prediction Engine Active
+                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 6 Explainable AI (XAI) Engine Active
               </span>
             </div>
-            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • Random Forest Classifier • 89.30% Accuracy</p>
+            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • XAI Root Cause Attribution • Random Forest ML • 89.30% Accuracy</p>
           </div>
         </div>
 
@@ -531,11 +532,12 @@ export default function App() {
         <aside className="w-full md:w-64 border-r border-slate-800 bg-[#0d1322] p-4 flex flex-col gap-1.5 shrink-0">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold px-2 py-1 flex items-center justify-between">
             <span>Navigation Deck</span>
-            <span className="text-cyan-400 font-bold">Phase 5</span>
+            <span className="text-cyan-400 font-bold">Phase 6</span>
           </div>
 
           {[
-            { id: 'prediction', label: 'Failure Prediction Engine (Phase 5)', icon: Binary, badge: 'Active' },
+            { id: 'xai', label: 'Explainable AI Engine (Phase 6)', icon: Sparkles, badge: 'Phase 6' },
+            { id: 'prediction', label: 'Failure Prediction Engine (Phase 5)', icon: Binary },
             { id: 'health', label: 'AI Health Score Engine (Phase 4)', icon: HeartPulse },
             { id: 'simulator', label: 'IoT Sensor Simulator (Phase 3)', icon: Radio },
             { id: 'chart', label: 'Realtime Telemetry Chart', icon: TrendingUp },
@@ -614,6 +616,20 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 overflow-y-auto p-6 space-y-6 bg-radial-gradient">
+          {/* TAB: EXPLAINABLE AI ENGINE (PHASE 6) */}
+          {activeTab === 'xai' && (
+            <ExplainableAIEngine
+              fleetState={fleetState}
+              machineFleet={MACHINE_FLEET}
+              selectedMachineId={selectedMachineId}
+              onSelectMachine={(id) => {
+                setSelectedMachineId(id);
+                loadMachineIntoPredictor(id);
+              }}
+              onNavigateToPredictor={() => setActiveTab('prediction')}
+            />
+          )}
+
           {/* TAB: FAILURE PREDICTION ENGINE (PHASE 5) */}
           {activeTab === 'prediction' && (
             <div className="space-y-6">
@@ -1338,31 +1354,44 @@ export default function App() {
 
           {/* TAB: APIS */}
           {activeTab === 'apis' && (
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
-              <div className="text-cyan-400 font-bold mb-2">Phase 5 Failure Prediction APIs:</div>
-              <div>• POST /api/v1/predict/telemetry - Inference on raw Temperature, Vibration, Current, Sound</div>
-              <div>• GET /api/v1/predict/machine/&#123;machine_id&#125; - Realtime machine prediction &amp; RUL</div>
-              <div>• GET /api/v1/predict/fleet - Full textile fleet prediction matrix</div>
-              <div>• GET /api/v1/predict/model/metrics - Model accuracy &amp; feature importances</div>
-              <div>• POST /api/v1/predict/retrain - On-demand model retraining</div>
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-3">
+              <div>
+                <div className="text-cyan-400 font-bold mb-1">Phase 6 Explainable AI (XAI) APIs:</div>
+                <div className="text-slate-400 space-y-0.5">
+                  <div>• POST /api/v1/xai/explain - Baseline percentage deviation &amp; attribution</div>
+                  <div>• GET /api/v1/xai/machine/&#123;machine_id&#125; - Realtime machine XAI diagnosis &amp; root cause</div>
+                  <div>• GET /api/v1/xai/fleet - Fleet-wide anomaly matrix &amp; root causes</div>
+                  <div>• GET /api/v1/xai/baselines - Rated equipment baselines &amp; threshold configs</div>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-slate-800">
+                <div className="text-indigo-400 font-bold mb-1">Phase 5 Failure Prediction APIs:</div>
+                <div className="text-slate-400 space-y-0.5">
+                  <div>• POST /api/v1/predict/telemetry - Inference on raw Temperature, Vibration, Current, Sound</div>
+                  <div>• GET /api/v1/predict/machine/&#123;machine_id&#125; - Realtime machine prediction &amp; RUL</div>
+                  <div>• GET /api/v1/predict/fleet - Full textile fleet prediction matrix</div>
+                  <div>• GET /api/v1/predict/model/metrics - Model accuracy &amp; feature importances</div>
+                  <div>• POST /api/v1/predict/retrain - On-demand model retraining</div>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Phase 5 Completion Banner */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/70 via-teal-950/50 to-cyan-950/70 border border-emerald-800/80 flex items-center justify-between">
+          {/* Phase 6 Completion Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/80 via-blue-950/60 to-emerald-950/70 border border-cyan-800/80 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-cyan-400" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">PHASE 5 COMPLETE: Failure Prediction Engine Operational</h4>
+                <h4 className="text-sm font-bold text-white">PHASE 6 COMPLETE: Explainable AI (XAI) Engine Operational</h4>
                 <p className="text-xs text-slate-300">
-                  Random Forest Classifier (35 trees, 89.30% accuracy), Dataset Generator, Model Training &amp; Serialization, Remaining Useful Life (RUL) estimation, and SQLite persistence. Awaiting your command <span className="font-mono text-emerald-300 font-bold bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">&quot;CONTINUE&quot;</span> to begin <b>PHASE 6: EXPLAINABLE AI (XAI)</b>.
+                  Deterministic Baseline Percentage Deviations (<span className="font-mono text-cyan-300 font-semibold">((Actual - Baseline) / Baseline) × 100</span>), Physical Mechanical/Electrical Root Cause Attribution, Natural Language Explanation Synthesis, Prescriptive Action SOP Checklists, and SQLite Table 4 (<code className="text-cyan-300 font-mono">failure_predictions.xai_explanation_json</code>) persistence. Awaiting your command <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">&quot;CONTINUE&quot;</span> to begin <b>PHASE 7: MULTILINGUAL MAINTENANCE CO-PILOT (Tamil, Hindi, English Voice &amp; Chatbot)</b>.
                 </p>
               </div>
             </div>
-            <div className="hidden sm:flex items-center gap-2">
-              <span className="text-[11px] font-mono text-emerald-400 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-700">
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <span className="text-[11px] font-mono text-cyan-300 px-3 py-1 rounded-full bg-cyan-950 border border-cyan-700">
                 Standing by for CONTINUE
               </span>
             </div>
