@@ -14,10 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.v1.health import router as health_router
 from backend.app.api.v1.predictions import router as prediction_router
 from backend.app.api.v1.xai import router as xai_router
+from backend.app.api.v1.copilot import router as copilot_router
 
 app = FastAPI(
     title="FactoryPulse AI - Predictive Maintenance API",
-    description="Industry 4.0 IoT Telemetry, Failure Prediction & Explainable AI for Textile MSMEs",
+    description="Industry 4.0 IoT Telemetry, Failure Prediction, Explainable AI & Multilingual Co-Pilot for Textile MSMEs",
     version="1.0.0"
 )
 
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(prediction_router, prefix="/api/v1")
 app.include_router(xai_router, prefix="/api/v1")
+app.include_router(copilot_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["Root"])
@@ -48,12 +50,14 @@ def root_info():
             "Phase 3: Real-time IoT Telemetry Simulator",
             "Phase 4: Machine Health Score Calculation Engine",
             "Phase 5: Failure Prediction Engine (Random Forest)",
-            "Phase 6: Explainable AI (XAI) Engine"
+            "Phase 6: Explainable AI (XAI) Engine",
+            "Phase 7: Multilingual Maintenance Co-Pilot (Tamil, Hindi, English)"
         ],
         "endpoints": {
             "health": "/api/v1/health",
             "predictions": "/api/v1/predict",
             "explainable_ai": "/api/v1/xai",
+            "copilot": "/api/v1/copilot",
             "docs": "/docs"
         }
     }

@@ -38,7 +38,9 @@ import {
   Clock,
   BarChart3,
   Binary,
-  ArrowRight
+  ArrowRight,
+  MessageSquare,
+  Languages
 } from 'lucide-react';
 import {
   LineChart,
@@ -50,6 +52,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import ExplainableAIEngine from './components/ExplainableAIEngine';
+import MultilingualCoPilot from './components/MultilingualCoPilot';
 
 interface MachineProfile {
   id: string;
@@ -232,7 +235,7 @@ function runRandomForestInference(temp: number, vib: number, curr: number, sound
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'xai' | 'prediction' | 'health' | 'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('xai');
+  const [activeTab, setActiveTab] = useState<'copilot' | 'xai' | 'prediction' | 'health' | 'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('copilot');
   const [selectedMachineId, setSelectedMachineId] = useState<string>('WVE-03');
   const [isAutoSimulating, setIsAutoSimulating] = useState<boolean>(true);
   const [tickCounter, setTickCounter] = useState<number>(172);
@@ -486,10 +489,10 @@ export default function App() {
                 FactoryPulse <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">AI</span>
               </h1>
               <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 font-mono font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 6 Explainable AI (XAI) Engine Active
+                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 7 Multilingual Co-Pilot Active
               </span>
             </div>
-            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • XAI Root Cause Attribution • Random Forest ML • 89.30% Accuracy</p>
+            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • Voice &amp; Chatbot (Tamil, Hindi, English) • XAI Root Cause • 89.30% Accuracy</p>
           </div>
         </div>
 
@@ -532,11 +535,12 @@ export default function App() {
         <aside className="w-full md:w-64 border-r border-slate-800 bg-[#0d1322] p-4 flex flex-col gap-1.5 shrink-0">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold px-2 py-1 flex items-center justify-between">
             <span>Navigation Deck</span>
-            <span className="text-cyan-400 font-bold">Phase 6</span>
+            <span className="text-cyan-400 font-bold">Phase 7</span>
           </div>
 
           {[
-            { id: 'xai', label: 'Explainable AI Engine (Phase 6)', icon: Sparkles, badge: 'Phase 6' },
+            { id: 'copilot', label: 'Multilingual Co-Pilot (Phase 7)', icon: MessageSquare, badge: 'Voice/AI' },
+            { id: 'xai', label: 'Explainable AI Engine (Phase 6)', icon: Sparkles },
             { id: 'prediction', label: 'Failure Prediction Engine (Phase 5)', icon: Binary },
             { id: 'health', label: 'AI Health Score Engine (Phase 4)', icon: HeartPulse },
             { id: 'simulator', label: 'IoT Sensor Simulator (Phase 3)', icon: Radio },
@@ -616,6 +620,20 @@ export default function App() {
 
         {/* Content Area */}
         <main className="flex-1 overflow-y-auto p-6 space-y-6 bg-radial-gradient">
+          {/* TAB: MULTILINGUAL MAINTENANCE CO-PILOT (PHASE 7) */}
+          {activeTab === 'copilot' && (
+            <MultilingualCoPilot
+              fleetState={fleetState}
+              machineFleet={MACHINE_FLEET}
+              selectedMachineId={selectedMachineId}
+              onSelectMachine={(id) => {
+                setSelectedMachineId(id);
+                loadMachineIntoPredictor(id);
+              }}
+              onNavigateToXAI={() => setActiveTab('xai')}
+            />
+          )}
+
           {/* TAB: EXPLAINABLE AI ENGINE (PHASE 6) */}
           {activeTab === 'xai' && (
             <ExplainableAIEngine
@@ -1356,6 +1374,15 @@ export default function App() {
           {activeTab === 'apis' && (
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-3">
               <div>
+                <div className="text-indigo-400 font-bold mb-1">Phase 7 Multilingual Co-Pilot APIs:</div>
+                <div className="text-slate-400 space-y-0.5">
+                  <div>• POST /api/v1/copilot/chat - Natural conversation in Tamil, Hindi &amp; English</div>
+                  <div>• GET /api/v1/copilot/history - Audit log of technician voice &amp; text dialogues (Table 8)</div>
+                  <div>• POST /api/v1/copilot/work-order - Direct logging to maintenance_logs (Table 5)</div>
+                  <div>• GET /api/v1/copilot/sops - Multilingual textile repair protocols</div>
+                </div>
+              </div>
+              <div className="pt-2 border-t border-slate-800">
                 <div className="text-cyan-400 font-bold mb-1">Phase 6 Explainable AI (XAI) APIs:</div>
                 <div className="text-slate-400 space-y-0.5">
                   <div>• POST /api/v1/xai/explain - Baseline percentage deviation &amp; attribution</div>
@@ -1365,7 +1392,7 @@ export default function App() {
                 </div>
               </div>
               <div className="pt-2 border-t border-slate-800">
-                <div className="text-indigo-400 font-bold mb-1">Phase 5 Failure Prediction APIs:</div>
+                <div className="text-emerald-400 font-bold mb-1">Phase 5 Failure Prediction APIs:</div>
                 <div className="text-slate-400 space-y-0.5">
                   <div>• POST /api/v1/predict/telemetry - Inference on raw Temperature, Vibration, Current, Sound</div>
                   <div>• GET /api/v1/predict/machine/&#123;machine_id&#125; - Realtime machine prediction &amp; RUL</div>
@@ -1377,21 +1404,21 @@ export default function App() {
             </div>
           )}
 
-          {/* Phase 6 Completion Banner */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/80 via-blue-950/60 to-emerald-950/70 border border-cyan-800/80 flex items-center justify-between">
+          {/* Phase 7 Completion Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-indigo-950/80 via-blue-950/60 to-cyan-950/70 border border-indigo-800/80 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-cyan-400" />
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center shrink-0">
+                <MessageSquare className="w-5 h-5 text-indigo-400" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">PHASE 6 COMPLETE: Explainable AI (XAI) Engine Operational</h4>
+                <h4 className="text-sm font-bold text-white">PHASE 7 COMPLETE: Multilingual Maintenance Co-Pilot Operational</h4>
                 <p className="text-xs text-slate-300">
-                  Deterministic Baseline Percentage Deviations (<span className="font-mono text-cyan-300 font-semibold">((Actual - Baseline) / Baseline) × 100</span>), Physical Mechanical/Electrical Root Cause Attribution, Natural Language Explanation Synthesis, Prescriptive Action SOP Checklists, and SQLite Table 4 (<code className="text-cyan-300 font-mono">failure_predictions.xai_explanation_json</code>) persistence. Awaiting your command <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">&quot;CONTINUE&quot;</span> to begin <b>PHASE 7: MULTILINGUAL MAINTENANCE CO-PILOT (Tamil, Hindi, English Voice &amp; Chatbot)</b>.
+                  Multilingual Voice &amp; Chatbot (<span className="text-indigo-300 font-semibold">Tamil தமிழ்</span>, <span className="text-indigo-300 font-semibold">Hindi हिन्दी</span>, <span className="text-indigo-300 font-semibold">English</span>), Speech Recognition &amp; Text-to-Speech (TTS), Curated Textile SOP Catalog, and SQLite Persistence (Table 8 <code className="text-cyan-300 font-mono">chat_history</code> &amp; Table 5 <code className="text-cyan-300 font-mono">maintenance_logs</code>). Awaiting your command <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">&quot;CONTINUE&quot;</span> to begin <b>PHASE 8: AUTOMATED SMART ALERTS (WhatsApp/Email) &amp; FINANCIAL ROI COST ANALYSIS</b>.
                 </p>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2 shrink-0">
-              <span className="text-[11px] font-mono text-cyan-300 px-3 py-1 rounded-full bg-cyan-950 border border-cyan-700">
+              <span className="text-[11px] font-mono text-indigo-300 px-3 py-1 rounded-full bg-indigo-950 border border-indigo-700">
                 Standing by for CONTINUE
               </span>
             </div>
