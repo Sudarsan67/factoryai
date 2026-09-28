@@ -31,7 +31,10 @@ import {
   Sparkles,
   Info,
   TrendingUp,
-  Terminal
+  Terminal,
+  HeartPulse,
+  Award,
+  AlertCircle
 } from 'lucide-react';
 import {
   LineChart,
@@ -40,11 +43,9 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  Legend
+  ResponsiveContainer
 } from 'recharts';
 
-// Machine Baseline Profiles
 interface MachineProfile {
   id: string;
   name: string;
@@ -86,11 +87,69 @@ interface LiveSensorState {
   history: Array<{ time: string; temp: number; vib: number; curr: number; sound: number }>;
 }
 
+// Phase 4 Formula Helper
+function computeSubScore(measured: number, baseline: number, warnFactor: number, critFactor: number): number {
+  if (measured <= baseline) return 100.0;
+  const warnThresh = baseline * warnFactor;
+  const critThresh = baseline * critFactor;
+
+  if (measured <= warnThresh) {
+    const fraction = (measured - baseline) / (warnThresh - baseline);
+    return Math.max(70.0, Math.round((100.0 - fraction * 30.0) * 10) / 10);
+  } else if (measured <= critThresh) {
+    const fraction = (measured - warnThresh) / (critThresh - warnThresh);
+    return Math.max(50.0, Math.round((70.0 - fraction * 20.0) * 10) / 10);
+  } else {
+    const excess = measured - critThresh;
+    const decay = excess / (critThresh * 0.5);
+    return Math.max(0.0, Math.round((50.0 - decay * 50.0) * 10) / 10);
+  }
+}
+
+function calculateHealth(t: number, v: number, c: number, s: number, prof: MachineProfile) {
+  const sTemp = computeSubScore(t, prof.baseTemp, 1.25, 1.55);
+  const sVib = computeSubScore(v, prof.baseVib, 1.75, 2.75);
+  const sCurr = computeSubScore(c, prof.baseCurrent, 1.35, 1.80);
+  const sSound = computeSubScore(s, prof.baseSound, 1.18, 1.35);
+
+  const composite = 0.35 * sVib + 0.30 * sTemp + 0.20 * sCurr + 0.15 * sSound;
+  const roundedScore = Math.max(0, Math.min(100, Math.round(composite * 10) / 10));
+
+  let category: 'Excellent' | 'Good' | 'Warning' | 'Critical';
+  if (roundedScore >= 90.0) category = 'Excellent';
+  else if (roundedScore >= 70.0) category = 'Good';
+  else if (roundedScore >= 50.0) category = 'Warning';
+  else category = 'Critical';
+
+  // Primary risk
+  const scores = [
+    { name: 'Vibration', score: sVib, val: v, base: prof.baseVib, unit: 'g' },
+    { name: 'Temperature', score: sTemp, val: t, base: prof.baseTemp, unit: '°C' },
+    { name: 'Current', score: sCurr, val: c, base: prof.baseCurrent, unit: 'A' },
+    { name: 'Sound', score: sSound, val: s, base: prof.baseSound, unit: 'dB' }
+  ];
+  scores.sort((a, b) => a.score - b.score);
+  const worst = scores[0];
+
+  const pct = Math.round(((worst.val - worst.base) / worst.base) * 100);
+  const primaryRisk = worst.score >= 90 ? 'None (All Nominal)' : `${worst.name} (+${pct}%)`;
+
+  return {
+    score: roundedScore,
+    category,
+    sTemp,
+    sVib,
+    sCurr,
+    sSound,
+    primaryRisk
+  };
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('simulator');
+  const [activeTab, setActiveTab] = useState<'health' | 'simulator' | 'chart' | 'schema' | 'architecture' | 'apis'>('health');
   const [selectedMachineId, setSelectedMachineId] = useState<string>('WVE-03');
   const [isAutoSimulating, setIsAutoSimulating] = useState<boolean>(true);
-  const [tickCounter, setTickCounter] = useState<number>(148);
+  const [tickCounter, setTickCounter] = useState<number>(156);
   const [lastTickTime, setLastTickTime] = useState<string>(new Date().toLocaleTimeString());
 
   // Fleet live states
@@ -99,10 +158,10 @@ export default function App() {
     MACHINE_FLEET.forEach(m => {
       const isFault = m.id === 'WVE-03';
       const faultType = m.id === 'WVE-03' ? 'Bearing Wear' : null;
-      const initialTemp = m.id === 'WVE-03' ? 68.2 : m.baseTemp;
-      const initialVib = m.id === 'WVE-03' ? 1.45 : m.baseVib;
-      const initialCurr = m.id === 'WVE-03' ? 9.2 : m.baseCurrent;
-      const initialSound = m.id === 'WVE-03' ? 84.1 : m.baseSound;
+      const initialTemp = m.id === 'WVE-03' ? 62.0 : m.baseTemp;
+      const initialVib = m.id === 'WVE-03' ? 1.05 : m.baseVib;
+      const initialCurr = m.id === 'WVE-03' ? 7.5 : m.baseCurrent;
+      const initialSound = m.id === 'WVE-03' ? 78.0 : m.baseSound;
 
       const dummyHistory = Array.from({ length: 8 }, (_, i) => ({
         time: `18:${10 + i}:00`,
@@ -149,10 +208,10 @@ export default function App() {
               rawSound += 12.0 + (Math.random() * 2.0);
               break;
             case 'Bearing Wear':
-              rawVib += 1.1 + (Math.random() * 0.3 - 0.15);
-              rawSound += 18.0 + (Math.random() * 3.0 - 1.5);
-              targetTemp += 14.0 + (Math.random() * 2.0);
-              rawCurrent += 2.2 + (Math.random() * 0.4);
+              rawVib += 0.85 + (Math.random() * 0.25);
+              rawSound += 14.0 + (Math.random() * 2.5);
+              targetTemp += 12.0 + (Math.random() * 1.5);
+              rawCurrent += 1.8 + (Math.random() * 0.3);
               break;
             case 'High Current Draw':
               rawCurrent += 5.8 + (Math.random() * 1.2 - 0.6);
@@ -214,6 +273,13 @@ export default function App() {
 
   const activeMachine = MACHINE_FLEET.find(m => m.id === selectedMachineId)!;
   const activeTelemetry = fleetState[selectedMachineId];
+  const activeHealth = calculateHealth(
+    activeTelemetry.temperature,
+    activeTelemetry.vibration,
+    activeTelemetry.current,
+    activeTelemetry.sound,
+    activeMachine
+  );
 
   const handleInjectFault = (faultName: string) => {
     setFleetState(prev => ({
@@ -239,10 +305,16 @@ export default function App() {
     triggerSimulationTick();
   };
 
-  const tempPct = Math.min(100, Math.max(0, ((activeTelemetry.temperature - 35) / (90 - 35)) * 100));
-  const vibPct = Math.min(100, Math.max(0, ((activeTelemetry.vibration - 0.1) / (2.5 - 0.1)) * 100));
-  const currPct = Math.min(100, Math.max(0, ((activeTelemetry.current - 2.0) / (15.0 - 2.0)) * 100));
-  const soundPct = Math.min(100, Math.max(0, ((activeTelemetry.sound - 50) / (100 - 50)) * 100));
+  // Fleet health summary calculation
+  const fleetSummaries = MACHINE_FLEET.map(m => {
+    const s = fleetState[m.id];
+    return calculateHealth(s.temperature, s.vibration, s.current, s.sound, m);
+  });
+  const avgFleetHealth = Math.round((fleetSummaries.reduce((acc, h) => acc + h.score, 0) / fleetSummaries.length) * 10) / 10;
+  const excellentCount = fleetSummaries.filter(h => h.category === 'Excellent').length;
+  const goodCount = fleetSummaries.filter(h => h.category === 'Good').length;
+  const warningCount = fleetSummaries.filter(h => h.category === 'Warning').length;
+  const criticalCount = fleetSummaries.filter(h => h.category === 'Critical').length;
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30">
@@ -250,7 +322,7 @@ export default function App() {
       <header className="border-b border-slate-800 bg-[#0d1424]/90 backdrop-blur sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 ring-1 ring-cyan-400/30">
-            <Radio className="w-5 h-5 text-white animate-pulse" />
+            <HeartPulse className="w-5 h-5 text-white animate-pulse" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -258,10 +330,10 @@ export default function App() {
                 FactoryPulse <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">AI</span>
               </h1>
               <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800 text-cyan-300 font-mono font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 3 IoT Engine Re-Verified
+                <CheckCircle2 className="w-3 h-3 text-cyan-400" /> Phase 4 AI Health Engine Active
               </span>
             </div>
-            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • 5.0s Multi-Sensor Simulator</p>
+            <p className="text-xs text-slate-400">AI Maintenance Co-Pilot for Textile MSMEs • 0-100 Multi-Factor Health Index</p>
           </div>
         </div>
 
@@ -304,11 +376,12 @@ export default function App() {
         <aside className="w-full md:w-64 border-r border-slate-800 bg-[#0d1322] p-4 flex flex-col gap-1.5 shrink-0">
           <div className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold px-2 py-1 flex items-center justify-between">
             <span>Navigation Deck</span>
-            <span className="text-cyan-400 font-bold">Phase 3</span>
+            <span className="text-cyan-400 font-bold">Phase 4</span>
           </div>
 
           {[
-            { id: 'simulator', label: 'IoT Sensor Simulator', icon: Radio },
+            { id: 'health', label: 'AI Health Score Engine (Phase 4)', icon: HeartPulse },
+            { id: 'simulator', label: 'IoT Sensor Simulator (Phase 3)', icon: Radio },
             { id: 'chart', label: 'Realtime Telemetry Chart', icon: TrendingUp },
             { id: 'schema', label: 'Database Schema (Phase 2)', icon: Database },
             { id: 'architecture', label: 'System Architecture (Phase 1)', icon: Network },
@@ -341,15 +414,13 @@ export default function App() {
             </div>
             <div className="space-y-1">
               {MACHINE_FLEET.map((m) => {
-                const live = fleetState[m.id];
+                const s = fleetState[m.id];
+                const h = calculateHealth(s.temperature, s.vibration, s.current, s.sound, m);
                 const isSelected = selectedMachineId === m.id;
                 return (
                   <button
                     key={m.id}
-                    onClick={() => {
-                      setSelectedMachineId(m.id);
-                      if (activeTab !== 'simulator' && activeTab !== 'chart') setActiveTab('simulator');
-                    }}
+                    onClick={() => setSelectedMachineId(m.id)}
                     className={`w-full text-left px-2.5 py-2 rounded-lg text-xs font-mono flex items-center justify-between transition ${
                       isSelected
                         ? 'bg-cyan-950 text-cyan-200 border border-cyan-700 font-bold'
@@ -360,15 +431,14 @@ export default function App() {
                       <span className="text-sm">{m.icon}</span>
                       <span className="truncate">{m.id}</span>
                     </div>
-                    {live.isFault ? (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-950 text-rose-300 border border-rose-800 font-bold">
-                        FAULT
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
-                        OK
-                      </span>
-                    )}
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      h.category === 'Excellent' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                      h.category === 'Good' ? 'bg-blue-950 text-blue-400 border border-blue-800' :
+                      h.category === 'Warning' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                      'bg-rose-950 text-rose-400 border border-rose-800'
+                    }`}>
+                      {h.score}%
+                    </span>
                   </button>
                 );
               })}
@@ -379,10 +449,10 @@ export default function App() {
             <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                <span className="text-xs font-semibold text-slate-200">Execution Phase: 3 of 20</span>
+                <span className="text-xs font-semibold text-slate-200">Execution Phase: 4 of 20</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Phase 3 delivers the realistic IoT sensor simulator across 6 textile machines with 6 fault signatures.
+                Phase 4 calculates multi-factor composite health scores (0-100) and risk categorizations.
               </p>
             </div>
           </div>
@@ -390,379 +460,295 @@ export default function App() {
 
         {/* Content View Area */}
         <main className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Machine Fleet Quick Bar */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-[#101b33] border border-slate-800">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Fleet Live Telemetry Matrix (Simulated IoT Stream)</h2>
-              </div>
-              <span className="text-xs text-slate-400 font-mono">Last Synchronized: {lastTickTime}</span>
+          {/* Fleet Health Summary Overview Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-mono text-slate-400 uppercase">Total Assets</div>
+              <div className="text-2xl font-mono font-bold text-white mt-1">6 Machines</div>
+              <div className="text-[10px] text-slate-500 font-mono">100% Online</div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5">
-              {MACHINE_FLEET.map((m) => {
-                const s = fleetState[m.id];
-                const isSelected = selectedMachineId === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setSelectedMachineId(m.id)}
-                    className={`p-2.5 rounded-lg text-left transition border ${
-                      isSelected
-                        ? 'bg-slate-900 border-cyan-500 shadow-md shadow-cyan-950'
-                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-base">{m.icon}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
-                        s.isFault
-                          ? 'bg-rose-950 text-rose-400 border border-rose-800/80 animate-pulse'
-                          : 'bg-emerald-950 text-emerald-400 border border-emerald-800/60'
-                      }`}>
-                        {s.isFault ? s.faultType || 'FAULT' : 'Healthy'}
-                      </span>
-                    </div>
-                    <div className="font-semibold text-xs text-slate-200 truncate">{m.id}</div>
-                    <div className="text-[10px] text-slate-400 truncate mb-1.5">{m.name}</div>
-                    <div className="grid grid-cols-2 gap-x-1 text-[10px] font-mono text-slate-400 border-t border-slate-800/60 pt-1">
-                      <span>T: <b className={s.temperature > 70 ? 'text-rose-400' : 'text-slate-300'}>{s.temperature}°C</b></span>
-                      <span>V: <b className={s.vibration > 1.2 ? 'text-amber-400' : 'text-slate-300'}>{s.vibration}g</b></span>
-                      <span>I: <b className={s.current > 10 ? 'text-rose-400' : 'text-slate-300'}>{s.current}A</b></span>
-                      <span>S: <b className={s.sound > 80 ? 'text-amber-400' : 'text-slate-300'}>{s.sound}dB</b></span>
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-mono text-slate-400 uppercase">Avg Fleet Health</div>
+              <div className={`text-2xl font-mono font-bold mt-1 ${
+                avgFleetHealth >= 90 ? 'text-emerald-400' :
+                avgFleetHealth >= 70 ? 'text-blue-400' :
+                avgFleetHealth >= 50 ? 'text-amber-400' :
+                'text-rose-400'
+              }`}>
+                {avgFleetHealth}%
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono">Weighted Multi-modal</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-mono text-emerald-400 uppercase">Excellent (90-100)</div>
+              <div className="text-2xl font-mono font-bold text-emerald-300 mt-1">{excellentCount}</div>
+              <div className="text-[10px] text-emerald-500/80 font-mono">Zero Intervention</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-mono text-blue-400 uppercase">Good (70-89)</div>
+              <div className="text-2xl font-mono font-bold text-blue-300 mt-1">{goodCount}</div>
+              <div className="text-[10px] text-blue-500/80 font-mono">Routine Service</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-mono text-amber-400 uppercase">Warning (50-69)</div>
+              <div className="text-2xl font-mono font-bold text-amber-300 mt-1">{warningCount}</div>
+              <div className="text-[10px] text-amber-500/80 font-mono">Inspect &lt; 24h</div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="text-[11px] font-mono text-rose-400 uppercase">Critical (&lt;50)</div>
+              <div className="text-2xl font-mono font-bold text-rose-300 mt-1">{criticalCount}</div>
+              <div className="text-[10px] text-rose-500/80 font-mono">Immediate Stop</div>
             </div>
           </div>
 
-          {/* Tab: Realtime Telemetry Charts */}
-          {activeTab === 'chart' && (
+          {/* Tab 1: AI Health Engine Dashboard (Phase 4 Core Deliverable) */}
+          {activeTab === 'health' && (
             <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-cyan-400" />
-                    Realtime Telemetry Chart: <span className="font-mono text-cyan-300">{activeMachine.id} ({activeMachine.name})</span>
-                  </h3>
-                  <p className="text-xs text-slate-400">Continuous 5s sampling stream plotted on multi-axis telemetry monitor</p>
+              {/* Main Machine Health Banner */}
+              <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-[#0e1628] to-[#101b33] border border-slate-800 flex flex-col lg:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                  {/* Circular Radial Score Display */}
+                  <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="42" stroke="#1e293b" strokeWidth="8" fill="transparent" />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        stroke={
+                          activeHealth.category === 'Excellent' ? '#10b981' :
+                          activeHealth.category === 'Good' ? '#3b82f6' :
+                          activeHealth.category === 'Warning' ? '#f59e0b' :
+                          '#f43f5e'
+                        }
+                        strokeWidth="8"
+                        strokeDasharray={264}
+                        strokeDashoffset={264 - (264 * activeHealth.score) / 100}
+                        strokeLinecap="round"
+                        fill="transparent"
+                        className="transition-all duration-700 ease-out"
+                      />
+                    </svg>
+                    <div className="absolute flex flex-col items-center justify-center">
+                      <span className="text-2xl font-extrabold font-mono text-white">{activeHealth.score}%</span>
+                      <span className="text-[9px] uppercase font-mono text-slate-400">Health</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">{activeMachine.icon}</span>
+                      <h3 className="text-lg font-bold text-white">{activeMachine.name}</h3>
+                      <span className="text-xs font-mono text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
+                        {activeMachine.id}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Type: <b className="text-slate-300">{activeMachine.type}</b> • Section: <b className="text-slate-300">{activeMachine.location}</b> • Nominal Power: <b className="text-slate-300">{activeMachine.power}</b>
+                    </p>
+                    <div className="flex items-center gap-2 mt-3">
+                      <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 ${
+                        activeHealth.category === 'Excellent' ? 'bg-emerald-950 text-emerald-300 border border-emerald-700' :
+                        activeHealth.category === 'Good' ? 'bg-blue-950 text-blue-300 border border-blue-700' :
+                        activeHealth.category === 'Warning' ? 'bg-amber-950 text-amber-300 border border-amber-700 animate-pulse' :
+                        'bg-rose-950 text-rose-300 border border-rose-700 animate-pulse'
+                      }`}>
+                        <Award className="w-3.5 h-3.5" /> Grade: {activeHealth.category} ({
+                          activeHealth.category === 'Excellent' ? '90-100%' :
+                          activeHealth.category === 'Good' ? '70-89%' :
+                          activeHealth.category === 'Warning' ? '50-69%' :
+                          '<50%'
+                        })
+                      </span>
+
+                      <span className="px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-xs font-mono text-slate-300 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                        Risk: <b className="text-slate-200">{activeHealth.primaryRisk}</b>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-slate-300 px-3 py-1 rounded bg-slate-950 border border-slate-800">
-                    Cadence: 5.0s
-                  </span>
+
+                {/* Quick Action Button */}
+                <div className="flex flex-col sm:flex-row items-center gap-2 shrink-0">
+                  {activeTelemetry.isFault ? (
+                    <button
+                      onClick={handleClearFault}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold font-mono flex items-center gap-2 transition shadow-lg shadow-emerald-950"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Restore Machine to Healthy
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleInjectFault('Bearing Wear')}
+                      className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold font-mono flex items-center gap-2 transition shadow-lg shadow-amber-950"
+                    >
+                      <Flame className="w-4 h-4" />
+                      Test Fault (Degrade Health)
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Temperature Chart */}
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-rose-300 font-mono flex items-center gap-1.5">
-                      <Thermometer className="w-4 h-4 text-rose-400" /> Temperature (°C) [Limit: 35 - 90°C]
+              {/* 4 Multi-Factor Sub-Score Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. Vibration Sub-Score (Weight: 35%) */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
+                      <Activity className="w-4 h-4 text-cyan-400" /> Vibration Health (35%)
                     </span>
-                    <span className="text-xs font-mono text-rose-400 font-bold">{activeTelemetry.temperature}°C</span>
+                    <span className="text-[10px] font-mono text-cyan-400">Weight: 0.35</span>
                   </div>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={activeTelemetry.history}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <YAxis domain={[35, 90]} stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
-                        <Line type="monotone" dataKey="temp" stroke="#f43f5e" strokeWidth={2.5} dot={{ r: 3 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <div className="text-2xl font-mono font-extrabold text-white my-1">
+                    {activeHealth.sVib}%
+                  </div>
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800 my-2">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeHealth.sVib >= 70 ? 'bg-cyan-500' : activeHealth.sVib >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${activeHealth.sVib}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400 flex justify-between">
+                    <span>Live: <b className="text-slate-200">{activeTelemetry.vibration}g</b></span>
+                    <span>Base: {activeMachine.baseVib}g</span>
                   </div>
                 </div>
 
-                {/* Vibration Chart */}
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-cyan-300 font-mono flex items-center gap-1.5">
-                      <Activity className="w-4 h-4 text-cyan-400" /> Vibration (g) [Limit: 0.1 - 2.5g]
+                {/* 2. Temperature Sub-Score (Weight: 30%) */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
+                      <Thermometer className="w-4 h-4 text-rose-400" /> Thermal Health (30%)
                     </span>
-                    <span className="text-xs font-mono text-cyan-400 font-bold">{activeTelemetry.vibration}g</span>
+                    <span className="text-[10px] font-mono text-rose-400">Weight: 0.30</span>
                   </div>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={activeTelemetry.history}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <YAxis domain={[0.1, 2.5]} stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
-                        <Line type="monotone" dataKey="vib" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 3 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <div className="text-2xl font-mono font-extrabold text-white my-1">
+                    {activeHealth.sTemp}%
+                  </div>
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800 my-2">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeHealth.sTemp >= 70 ? 'bg-emerald-500' : activeHealth.sTemp >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${activeHealth.sTemp}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400 flex justify-between">
+                    <span>Live: <b className="text-slate-200">{activeTelemetry.temperature}°C</b></span>
+                    <span>Base: {activeMachine.baseTemp}°C</span>
                   </div>
                 </div>
 
-                {/* Current Chart */}
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-amber-300 font-mono flex items-center gap-1.5">
-                      <Zap className="w-4 h-4 text-amber-400" /> Current (A) [Limit: 2 - 15A]
+                {/* 3. Current Sub-Score (Weight: 20%) */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-amber-400" /> Electrical Load (20%)
                     </span>
-                    <span className="text-xs font-mono text-amber-400 font-bold">{activeTelemetry.current}A</span>
+                    <span className="text-[10px] font-mono text-amber-400">Weight: 0.20</span>
                   </div>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={activeTelemetry.history}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <YAxis domain={[2, 15]} stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
-                        <Line type="monotone" dataKey="curr" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <div className="text-2xl font-mono font-extrabold text-white my-1">
+                    {activeHealth.sCurr}%
+                  </div>
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800 my-2">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeHealth.sCurr >= 70 ? 'bg-emerald-500' : activeHealth.sCurr >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${activeHealth.sCurr}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400 flex justify-between">
+                    <span>Live: <b className="text-slate-200">{activeTelemetry.current}A</b></span>
+                    <span>Base: {activeMachine.baseCurrent}A</span>
                   </div>
                 </div>
 
-                {/* Sound Chart */}
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-bold text-indigo-300 font-mono flex items-center gap-1.5">
-                      <Volume2 className="w-4 h-4 text-indigo-400" /> Acoustic Sound (dB) [Limit: 50 - 100dB]
+                {/* 4. Sound Sub-Score (Weight: 15%) */}
+                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-slate-300 flex items-center gap-1.5">
+                      <Volume2 className="w-4 h-4 text-indigo-400" /> Acoustic Health (15%)
                     </span>
-                    <span className="text-xs font-mono text-indigo-400 font-bold">{activeTelemetry.sound}dB</span>
+                    <span className="text-[10px] font-mono text-indigo-400">Weight: 0.15</span>
                   </div>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={activeTelemetry.history}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <YAxis domain={[50, 100]} stroke="#64748b" tick={{ fontSize: 10 }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
-                        <Line type="monotone" dataKey="sound" stroke="#818cf8" strokeWidth={2.5} dot={{ r: 3 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <div className="text-2xl font-mono font-extrabold text-white my-1">
+                    {activeHealth.sSound}%
+                  </div>
+                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800 my-2">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        activeHealth.sSound >= 70 ? 'bg-indigo-500' : activeHealth.sSound >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${activeHealth.sSound}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] font-mono text-slate-400 flex justify-between">
+                    <span>Live: <b className="text-slate-200">{activeTelemetry.sound}dB</b></span>
+                    <span>Base: {activeMachine.baseSound}dB</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mathematical Formula & Standards Explanation Panel */}
+              <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <h4 className="text-xs font-bold text-cyan-300 font-mono flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-cyan-400" />
+                    Mathematical Formula & Industrial Normalization Matrix (Phase 4 Specification)
+                  </h4>
+                  <span className="text-[10px] font-mono text-slate-400">Industry 4.0 Standard</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono text-slate-300">
+                  <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+                    <div className="text-cyan-400 font-bold">1. Multi-Modal Composite Health Formula:</div>
+                    <code className="text-emerald-300 block bg-slate-900 p-2 rounded text-[11px]">
+                      H = (0.35 × S_vib) + (0.30 × S_temp) + (0.20 × S_curr) + (0.15 × S_sound)
+                    </code>
+                    <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                      Weights reflect mechanical degradation dominance in spinning and weaving plants. Vibration and temperature are leading indicators of bearing raceway fatigue and motor winding thermal breakdown.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2">
+                    <div className="text-cyan-400 font-bold">2. Industry 4.0 Grading Categories:</div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between p-1 rounded bg-emerald-950/40 text-emerald-300">
+                        <span>90 - 100: Excellent</span>
+                        <span>Nominal Operation</span>
+                      </div>
+                      <div className="flex justify-between p-1 rounded bg-blue-950/40 text-blue-300">
+                        <span>70 - 89: Good</span>
+                        <span>Routine Inspection</span>
+                      </div>
+                      <div className="flex justify-between p-1 rounded bg-amber-950/40 text-amber-300">
+                        <span>50 - 69: Warning</span>
+                        <span>Action Due &lt; 24h</span>
+                      </div>
+                      <div className="flex justify-between p-1 rounded bg-rose-950/40 text-rose-300">
+                        <span>Below 50: Critical</span>
+                        <span>Emergency Shutdown</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Tab 1: IoT Simulator Cockpit */}
+          {/* Tab 2: IoT Sensor Simulator Cockpit */}
           {activeTab === 'simulator' && (
             <div className="space-y-6">
-              {/* Selected Machine Detail Header */}
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-center text-2xl">
-                    {activeMachine.icon}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-bold text-white">{activeMachine.name}</h3>
-                      <span className="text-xs font-mono text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800 font-bold">
-                        {activeMachine.id}
-                      </span>
-                      {activeTelemetry.isFault ? (
-                        <span className="text-xs font-mono text-rose-300 bg-rose-950 px-2 py-0.5 rounded border border-rose-800 font-bold flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 text-rose-400" /> FAULT: {activeTelemetry.faultType}
-                        </span>
-                      ) : (
-                        <span className="text-xs font-mono text-emerald-300 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Condition: Healthy Nominal
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Type: <b className="text-slate-300">{activeMachine.type}</b> • Location: <b className="text-slate-300">{activeMachine.location}</b> • Rated Load: <b className="text-slate-300">{activeMachine.power}</b>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {activeTelemetry.isFault ? (
-                    <button
-                      onClick={handleClearFault}
-                      className="px-3.5 py-2 rounded-lg bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-200 text-xs font-bold flex items-center gap-2 transition"
-                    >
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      Clear Fault (Return to Healthy)
-                    </button>
-                  ) : (
-                    <span className="text-xs font-mono text-slate-400 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
-                      Machine operating under normal physics parameters
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* 4 Multi-Modal Live Sensor Gauges */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Temperature Gauge */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
-                      <Thermometer className="w-4 h-4 text-rose-400" />
-                      Temperature Sensor
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500">Range: 35 - 90°C</span>
-                  </div>
-
-                  <div className="flex items-baseline gap-2 my-2">
-                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
-                      activeTelemetry.temperature >= 75 ? 'text-rose-400' :
-                      activeTelemetry.temperature >= 56 ? 'text-amber-400' :
-                      'text-emerald-400'
-                    }`}>
-                      {activeTelemetry.temperature}
-                    </span>
-                    <span className="text-base text-slate-400 font-mono">°C</span>
-                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
-                      Base: {activeMachine.baseTemp}°C
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        activeTelemetry.temperature >= 75 ? 'bg-rose-500' :
-                        activeTelemetry.temperature >= 56 ? 'bg-amber-500' :
-                        'bg-emerald-500'
-                      }`}
-                      style={{ width: `${tempPct}%` }}
-                    />
-                  </div>
-
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
-                    <span>35°C</span>
-                    <span>Nominal: 40-55°C</span>
-                    <span>90°C</span>
-                  </div>
-                </div>
-
-                {/* 2. Vibration Gauge */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
-                      <Activity className="w-4 h-4 text-cyan-400" />
-                      Vibration Sensor
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500">Range: 0.1 - 2.5g</span>
-                  </div>
-
-                  <div className="flex items-baseline gap-2 my-2">
-                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
-                      activeTelemetry.vibration >= 1.6 ? 'text-rose-400' :
-                      activeTelemetry.vibration >= 0.8 ? 'text-amber-400' :
-                      'text-cyan-400'
-                    }`}>
-                      {activeTelemetry.vibration}
-                    </span>
-                    <span className="text-base text-slate-400 font-mono">g (RMS)</span>
-                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
-                      Base: {activeMachine.baseVib}g
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        activeTelemetry.vibration >= 1.6 ? 'bg-rose-500' :
-                        activeTelemetry.vibration >= 0.8 ? 'bg-amber-500' :
-                        'bg-cyan-500'
-                      }`}
-                      style={{ width: `${vibPct}%` }}
-                    />
-                  </div>
-
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
-                    <span>0.1g</span>
-                    <span>Normal: &lt;0.8g</span>
-                    <span>2.5g</span>
-                  </div>
-                </div>
-
-                {/* 3. Current Gauge */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
-                      <Zap className="w-4 h-4 text-amber-400" />
-                      Current Draw
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500">Range: 2 - 15A</span>
-                  </div>
-
-                  <div className="flex items-baseline gap-2 my-2">
-                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
-                      activeTelemetry.current >= 12.0 ? 'text-rose-400' :
-                      activeTelemetry.current >= 8.1 ? 'text-amber-400' :
-                      'text-emerald-400'
-                    }`}>
-                      {activeTelemetry.current}
-                    </span>
-                    <span className="text-base text-slate-400 font-mono">Amperes</span>
-                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
-                      Base: {activeMachine.baseCurrent}A
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        activeTelemetry.current >= 12.0 ? 'bg-rose-500' :
-                        activeTelemetry.current >= 8.1 ? 'bg-amber-500' :
-                        'bg-emerald-500'
-                      }`}
-                      style={{ width: `${currPct}%` }}
-                    />
-                  </div>
-
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
-                    <span>2.0A</span>
-                    <span>Rated: 4-8A</span>
-                    <span>15.0A</span>
-                  </div>
-                </div>
-
-                {/* 4. Sound Gauge */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono font-bold text-slate-400 flex items-center gap-1.5">
-                      <Volume2 className="w-4 h-4 text-indigo-400" />
-                      Acoustic Sound
-                    </span>
-                    <span className="text-[10px] font-mono text-slate-500">Range: 50 - 100dB</span>
-                  </div>
-
-                  <div className="flex items-baseline gap-2 my-2">
-                    <span className={`text-3xl font-mono font-extrabold tracking-tight ${
-                      activeTelemetry.sound >= 88.0 ? 'text-rose-400' :
-                      activeTelemetry.sound >= 75.0 ? 'text-amber-400' :
-                      'text-indigo-400'
-                    }`}>
-                      {activeTelemetry.sound}
-                    </span>
-                    <span className="text-base text-slate-400 font-mono">dB</span>
-                    <span className="text-[11px] text-slate-500 ml-auto font-mono">
-                      Base: {activeMachine.baseSound}dB
-                    </span>
-                  </div>
-
-                  <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
-                    <div
-                      className={`h-full transition-all duration-500 ${
-                        activeTelemetry.sound >= 88.0 ? 'bg-rose-500' :
-                        activeTelemetry.sound >= 75.0 ? 'bg-amber-500' :
-                        'bg-indigo-500'
-                      }`}
-                      style={{ width: `${soundPct}%` }}
-                    />
-                  </div>
-
-                  <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2">
-                    <span>50dB</span>
-                    <span>Safe: &lt;75dB</span>
-                    <span>100dB</span>
-                  </div>
-                </div>
-              </div>
-
               {/* Fault Injection Control Deck */}
               <div className="p-5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -772,7 +758,7 @@ export default function App() {
                       Interactive Fault Injection Panel (Test All 6 Fault Scenarios)
                     </h3>
                     <p className="text-xs text-slate-400">
-                      Inject simulated physical anomalies into <span className="text-cyan-300 font-mono">{activeMachine.id} ({activeMachine.name})</span> to evaluate AI detection.
+                      Inject simulated physical anomalies into <span className="text-cyan-300 font-mono">{activeMachine.id} ({activeMachine.name})</span>.
                     </p>
                   </div>
                   <span className="px-2.5 py-1 bg-amber-950/80 text-amber-300 border border-amber-800/80 rounded font-mono text-xs font-semibold">
@@ -830,155 +816,82 @@ export default function App() {
                   })}
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Real-time Telemetry Stream History */}
-              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <h3 className="text-xs font-bold text-slate-200 font-mono flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-cyan-400" />
-                    5-Second Telemetry Time-Series Buffer (`sensor_readings` SQLite Table)
-                  </h3>
-                  <button
-                    onClick={() => setActiveTab('chart')}
-                    className="text-[11px] font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
-                  >
-                    <TrendingUp className="w-3.5 h-3.5" /> View Interactive Charts &rarr;
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-mono">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-slate-500 text-[10px] uppercase">
-                        <th className="py-2 px-3">Timestamp</th>
-                        <th className="py-2 px-3">Machine ID</th>
-                        <th className="py-2 px-3">Temperature</th>
-                        <th className="py-2 px-3">Vibration</th>
-                        <th className="py-2 px-3">Current</th>
-                        <th className="py-2 px-3">Sound</th>
-                        <th className="py-2 px-3">State</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/60">
-                      {(activeTelemetry.history && activeTelemetry.history.length > 0
-                        ? activeTelemetry.history
-                        : [
-                            { time: lastTickTime, temp: activeTelemetry.temperature, vib: activeTelemetry.vibration, curr: activeTelemetry.current, sound: activeTelemetry.sound }
-                          ]
-                      ).map((h, i) => (
-                        <tr key={i} className="hover:bg-slate-950/60 transition">
-                          <td className="py-2 px-3 text-slate-400">{h.time}</td>
-                          <td className="py-2 px-3 font-bold text-cyan-300">{activeMachine.id}</td>
-                          <td className={`py-2 px-3 ${h.temp > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}`}>{h.temp}°C</td>
-                          <td className={`py-2 px-3 ${h.vib > 1.2 ? 'text-amber-400 font-bold' : 'text-slate-300'}`}>{h.vib}g</td>
-                          <td className={`py-2 px-3 ${h.curr > 10 ? 'text-rose-400 font-bold' : 'text-slate-300'}`}>{h.curr}A</td>
-                          <td className={`py-2 px-3 ${h.sound > 80 ? 'text-amber-400 font-bold' : 'text-slate-300'}`}>{h.sound}dB</td>
-                          <td className="py-2 px-3">
-                            {activeTelemetry.isFault ? (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-950 text-rose-300 border border-rose-800">
-                                {activeTelemetry.faultType}
-                              </span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800">
-                                Healthy Nominal
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+          {/* Tab 3: Charts */}
+          {activeTab === 'chart' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-cyan-400" /> Realtime Telemetry Monitor
+                </h3>
+              </div>
+              <div className="h-64 w-full p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={activeTelemetry.history}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                    <YAxis stroke="#64748b" tick={{ fontSize: 10 }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', fontSize: '11px' }} />
+                    <Line type="monotone" dataKey="temp" stroke="#f43f5e" name="Temp (°C)" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="curr" stroke="#f59e0b" name="Current (A)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
           )}
 
-          {/* Phase 2: Schema Viewer (Preserved) */}
+          {/* Phase 2 Schema & Architecture tabs preserved */}
           {activeTab === 'schema' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Database className="w-5 h-5 text-cyan-400" /> Database Schema (Phase 2 Verified)
-                </h3>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 leading-relaxed overflow-x-auto">
-                <pre>{`-- SQLite Tables Defined & Populated in Phase 2:
-1. machines (Master catalog for SPN-01, WVE-03, KNT-02, DYE-04, MTR-05, CMP-06)
-2. machine_health (Continuous 0-100 composite index)
-3. sensor_readings (5s simulated IoT stream: T, V, I, S)
-4. failure_predictions (Random Forest predictions & XAI)
-5. maintenance_logs (Prescriptive Co-Pilot troubleshooting tickets)
-6. alerts (WhatsApp notification payloads)
-7. cost_analysis (MSME downtime & savings in INR)
-8. chat_history (Plant manager conversational queries)
-9. users (Operators, technicians & mill owners)`}</pre>
-              </div>
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300">
+              <pre>{`-- SQLite Tables (Phase 2):
+1. machines
+2. machine_health
+3. sensor_readings
+4. failure_predictions
+5. maintenance_logs
+6. alerts
+7. cost_analysis
+8. chat_history
+9. users`}</pre>
             </div>
           )}
 
-          {/* Phase 1: Architecture (Preserved) */}
           {activeTab === 'architecture' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Network className="w-5 h-5 text-cyan-400" /> System Architecture (Phase 1 Verified)
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-cyan-400 mb-2">1. IoT Simulation</div>
-                  <p className="text-slate-400">5s physics simulation of T, V, I, S across 6 textile machines with 6 fault signatures.</p>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-indigo-400 mb-2">2. FastAPI & SQLite</div>
-                  <p className="text-slate-400">Asynchronous REST backend with WAL-mode SQLite database preserving 9 relational tables.</p>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-purple-400 mb-2">3. Dual AI Pipeline</div>
-                  <p className="text-slate-400">Continuous 0-100 Health Engine, Random Forest failure prediction, and Isolation Forest anomalies.</p>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="font-bold text-emerald-400 mb-2">4. Co-Pilot UI</div>
-                  <p className="text-slate-400">React 19 dashboard, WhatsApp alert dispatch cards, plant chatbot, and multilingual voice player.</p>
-                </div>
-              </div>
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300">
+              <pre>{`-- Complete System Architecture (Phase 1):
+• Tier 1: Simulated IoT Engine (5s telemetry)
+• Tier 2: FastAPI + SQLite WAL Database
+• Tier 3: AI Health & Prediction Models
+• Tier 4: Industry 4.0 Dashboard & Co-Pilot`}</pre>
             </div>
           )}
 
-          {/* Phase 1: APIs (Preserved) */}
           {activeTab === 'apis' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Server className="w-5 h-5 text-cyan-400" /> API Architecture
-                </h3>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-2">
-                <div>• <span className="text-cyan-400">GET /api/v1/machines</span> - Master fleet listing</div>
-                <div>• <span className="text-cyan-400">GET /api/v1/sensors/live/&#123;machine_id&#125;</span> - 5s real-time telemetry</div>
-                <div>• <span className="text-cyan-400">POST /api/v1/simulator/inject-fault</span> - Fault injection endpoint</div>
-                <div>• <span className="text-cyan-400">GET /api/v1/health/&#123;machine_id&#125;</span> - Composite health score (0-100)</div>
-                <div>• <span className="text-cyan-400">POST /api/v1/predict/failure</span> - Random Forest failure prediction</div>
-                <div>• <span className="text-cyan-400">GET /api/v1/cost/impact/&#123;machine_id&#125;</span> - MSME downtime financial impact in ₹</div>
-              </div>
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1">
+              <div>• GET /api/v1/health/&#123;machine_id&#125; - Realtime health score (0-100) &amp; category</div>
+              <div>• GET /api/v1/health/fleet/summary - Aggregated fleet health stats</div>
+              <div>• POST /api/v1/health/compute - Ad-hoc health score calculation</div>
+              <div>• GET /api/v1/health/history/&#123;machine_id&#125; - Historical health trends</div>
             </div>
           )}
 
-          {/* Phase 3 Completion Banner */}
-          <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/70 via-blue-950/50 to-indigo-950/70 border border-cyan-800/80 flex items-center justify-between">
+          {/* Phase 4 Completion Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/70 via-teal-950/50 to-cyan-950/70 border border-emerald-800/80 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-5 h-5 text-cyan-400" />
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">PHASE 3 COMPLETE: Simulated IoT Engine Re-Run & Verified</h4>
+                <h4 className="text-sm font-bold text-white">PHASE 4 COMPLETE: AI Health Score Engine Operational</h4>
                 <p className="text-xs text-slate-300">
-                  Full multi-tick simulation executed, unit tests passing (7/7), SQLite database persistence confirmed, and Recharts multi-axis visualization active. Awaiting your command <span className="font-mono text-cyan-300 font-bold bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">&quot;CONTINUE&quot;</span> to commence <b>PHASE 4: AI HEALTH ENGINE</b>.
+                  0-100 formula, Excellent/Good/Warning/Critical categories, Python service, FastAPI routes, and unit tests verified. Awaiting your command <span className="font-mono text-emerald-300 font-bold bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">&quot;CONTINUE&quot;</span> to begin <b>PHASE 5: FAILURE PREDICTION ENGINE</b>.
                 </p>
               </div>
             </div>
             <div className="hidden sm:flex items-center gap-2">
-              <span className="text-[11px] font-mono text-cyan-400 px-3 py-1 rounded-full bg-cyan-950 border border-cyan-700">
+              <span className="text-[11px] font-mono text-emerald-400 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-700">
                 Standing by for CONTINUE
               </span>
             </div>
