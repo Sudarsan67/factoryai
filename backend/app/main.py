@@ -15,10 +15,11 @@ from backend.app.api.v1.health import router as health_router
 from backend.app.api.v1.predictions import router as prediction_router
 from backend.app.api.v1.xai import router as xai_router
 from backend.app.api.v1.copilot import router as copilot_router
+from backend.app.api.v1.alerts_cost import router as alerts_cost_router
 
 app = FastAPI(
     title="FactoryPulse AI - Predictive Maintenance API",
-    description="Industry 4.0 IoT Telemetry, Failure Prediction, Explainable AI & Multilingual Co-Pilot for Textile MSMEs",
+    description="Industry 4.0 IoT Telemetry, Failure Prediction, Explainable AI, Multilingual Co-Pilot & Smart WhatsApp Alerts for Textile MSMEs",
     version="1.0.0"
 )
 
@@ -36,6 +37,7 @@ app.include_router(health_router, prefix="/api/v1")
 app.include_router(prediction_router, prefix="/api/v1")
 app.include_router(xai_router, prefix="/api/v1")
 app.include_router(copilot_router, prefix="/api/v1")
+app.include_router(alerts_cost_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["Root"])
@@ -51,13 +53,15 @@ def root_info():
             "Phase 4: Machine Health Score Calculation Engine",
             "Phase 5: Failure Prediction Engine (Random Forest)",
             "Phase 6: Explainable AI (XAI) Engine",
-            "Phase 7: Multilingual Maintenance Co-Pilot (Tamil, Hindi, English)"
+            "Phase 7: Multilingual Maintenance Co-Pilot (Tamil, Hindi, English)",
+            "Phase 8: Automated Smart WhatsApp Alerts & Financial ROI Cost Analysis"
         ],
         "endpoints": {
             "health": "/api/v1/health",
             "predictions": "/api/v1/predict",
             "explainable_ai": "/api/v1/xai",
             "copilot": "/api/v1/copilot",
+            "alerts_and_cost": "/api/v1/alerts-cost",
             "docs": "/docs"
         }
     }
